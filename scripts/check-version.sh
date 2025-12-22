@@ -19,9 +19,9 @@ CHART_VERSION=$(grep '^version:' helm/Chart.yaml | sed 's/version: //')
 CHART_APP_VERSION=$(grep '^appVersion:' helm/Chart.yaml | sed 's/appVersion: "\(.*\)"/\1/')
 
 echo "📋 Current versions:"
-echo "  pyproject.toml:           $PYPROJECT_VERSION"
+echo "  pyproject.toml:             $PYPROJECT_VERSION"
 echo "  src/nodereaper/__init__.py: $INIT_VERSION"
-echo "  helm/Chart.yaml version:  $CHART_VERSION"
+echo "  helm/Chart.yaml version:    $CHART_VERSION"
 echo "  helm/Chart.yaml appVersion: $CHART_APP_VERSION"
 echo ""
 
@@ -55,7 +55,7 @@ fi
 if [ "$INCONSISTENT" = true ]; then
     echo ""
     echo "❌ Version inconsistencies found!"
-    echo "💡 Run ./scripts/update-version.sh <version> to fix"
+    echo "💡 Run ./scripts/prepare-release.sh <version> to fix and prepare release"
     exit 1
 else
     echo "✅ All versions are consistent!"

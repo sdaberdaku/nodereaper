@@ -2,8 +2,8 @@ apiVersion: v2
 name: nodereaper
 description: A Kubernetes tool for automatically detecting and cleaning up empty nodes
 type: application
-version: 1.1.0
-appVersion: "v1.1.0"
+version: 1.2.0
+appVersion: "v1.2.0"
 keywords:
   - kubernetes
   - node-management
