@@ -47,6 +47,11 @@ class NodeAnalyzer:
             self.logger.info(f"Node {node_name} is unreachable, marking for deletion")
             return True, "unreachable"
 
+        # Check if unschedulable (cordoned)
+        if self._is_node_unschedulable(node):
+            self.logger.info(f"Node {node_name} is unschedulable, marking for deletion")
+            return True, "unschedulable"
+
         # Check if empty
         if self._is_node_empty(pods):
             self.logger.info(f"Node {node_name} is empty, marking for deletion")
@@ -99,6 +104,14 @@ class NodeAnalyzer:
         conditions = node.status.conditions or []
         for condition in conditions:
             if condition.type == "Ready" and condition.status == "Unknown":
+                return True
+        return False
+
+    def _is_node_unschedulable(self, node: client.V1Node) -> bool:
+        """Check if node has unschedulable taint (cordoned)."""
+        taints = node.spec.taints or []
+        for taint in taints:
+            if taint.key == "node.kubernetes.io/unschedulable" and taint.effect == "NoSchedule":
                 return True
         return False
 

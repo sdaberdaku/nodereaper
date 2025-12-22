@@ -106,6 +106,55 @@ class TestNodeAnalyzer(unittest.TestCase):
         self.assertTrue(should_delete)
         self.assertEqual(reason, "unreachable")
 
+    def test_unschedulable_node(self):
+        """Test that unschedulable (cordoned) nodes are deleted."""
+        # Create unschedulable taint
+        unschedulable_taint = MagicMock()
+        unschedulable_taint.key = "node.kubernetes.io/unschedulable"
+        unschedulable_taint.effect = "NoSchedule"
+
+        unschedulable_node = self._create_mock_node(
+            "unschedulable-node", taints=[unschedulable_taint]
+        )
+
+        should_delete, reason = self.analyzer.should_delete_node(unschedulable_node, [])
+
+        self.assertTrue(should_delete)
+        self.assertEqual(reason, "unschedulable")
+
+    def test_unschedulable_node_with_workloads(self):
+        """Test that unschedulable nodes are deleted even with workloads."""
+        # Create unschedulable taint
+        unschedulable_taint = MagicMock()
+        unschedulable_taint.key = "node.kubernetes.io/unschedulable"
+        unschedulable_taint.effect = "NoSchedule"
+
+        unschedulable_node = self._create_mock_node(
+            "unschedulable-node", taints=[unschedulable_taint]
+        )
+        deployment_pod = self._create_mock_pod("deployment-pod", "Deployment")
+
+        should_delete, reason = self.analyzer.should_delete_node(
+            unschedulable_node, [deployment_pod]
+        )
+
+        self.assertTrue(should_delete)
+        self.assertEqual(reason, "unschedulable")
+
+    def test_unschedulable_wrong_effect(self):
+        """Test that nodes with unschedulable key but wrong effect are not deleted."""
+        # Create taint with wrong effect
+        wrong_effect_taint = MagicMock()
+        wrong_effect_taint.key = "node.kubernetes.io/unschedulable"
+        wrong_effect_taint.effect = "NoExecute"  # Wrong effect
+
+        node = self._create_mock_node("node-wrong-effect", taints=[wrong_effect_taint])
+
+        should_delete, reason = self.analyzer.should_delete_node(node, [])
+
+        self.assertTrue(should_delete)  # Should still be deleted because it's empty
+        self.assertEqual(reason, "empty")  # Not unschedulable, but empty
+
     def test_empty_node(self):
         """Test that empty nodes (only DaemonSet pods) are deleted."""
         empty_node = self._create_mock_node("empty-node")
@@ -136,6 +185,40 @@ class TestNodeAnalyzer(unittest.TestCase):
 
         self.assertTrue(self.analyzer._is_daemonset_pod(daemonset_pod))
         self.assertFalse(self.analyzer._is_daemonset_pod(deployment_pod))
+
+    def test_is_node_unschedulable(self):
+        """Test unschedulable node detection."""
+        # Test with correct unschedulable taint
+        unschedulable_taint = MagicMock()
+        unschedulable_taint.key = "node.kubernetes.io/unschedulable"
+        unschedulable_taint.effect = "NoSchedule"
+
+        unschedulable_node = self._create_mock_node("unschedulable", taints=[unschedulable_taint])
+        self.assertTrue(self.analyzer._is_node_unschedulable(unschedulable_node))
+
+        # Test with wrong effect
+        wrong_effect_taint = MagicMock()
+        wrong_effect_taint.key = "node.kubernetes.io/unschedulable"
+        wrong_effect_taint.effect = "NoExecute"
+
+        wrong_effect_node = self._create_mock_node("wrong-effect", taints=[wrong_effect_taint])
+        self.assertFalse(self.analyzer._is_node_unschedulable(wrong_effect_node))
+
+        # Test with wrong key
+        wrong_key_taint = MagicMock()
+        wrong_key_taint.key = "example.com/custom-taint"
+        wrong_key_taint.effect = "NoSchedule"
+
+        wrong_key_node = self._create_mock_node("wrong-key", taints=[wrong_key_taint])
+        self.assertFalse(self.analyzer._is_node_unschedulable(wrong_key_node))
+
+        # Test with no taints
+        no_taints_node = self._create_mock_node("no-taints", taints=[])
+        self.assertFalse(self.analyzer._is_node_unschedulable(no_taints_node))
+
+        # Test with None taints
+        none_taints_node = self._create_mock_node("none-taints", taints=None)
+        self.assertFalse(self.analyzer._is_node_unschedulable(none_taints_node))
 
     def test_format_age(self):
         """Test age formatting."""

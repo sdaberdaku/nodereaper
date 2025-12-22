@@ -96,6 +96,26 @@ class TestSlackNotifier(unittest.TestCase):
         self.assertIn("empty", message)
         self.assertIn("🗑️", message)
 
+    def test_format_message_unschedulable(self):
+        """Test message formatting for unschedulable nodes."""
+        node_info = {
+            "name": "cordoned-node",
+            "age": "20m",
+            "cluster": "prod-cluster",
+            "instance_type": "c5.xlarge",
+            "zone": "us-east-1a",
+        }
+
+        message = self.notifier._format_message(node_info, "unschedulable")
+
+        self.assertIn("cordoned-node", message)
+        self.assertIn("20m", message)
+        self.assertIn("prod-cluster", message)
+        self.assertIn("c5.xlarge", message)
+        self.assertIn("us-east-1a", message)
+        self.assertIn("unschedulable", message)
+        self.assertIn("🗑️", message)
+
 
 class TestNotificationManager(unittest.TestCase):
     """Test cases for NotificationManager class."""
