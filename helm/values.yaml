@@ -1,0 +1,125 @@
+# Default values for nodereaper
+# This is a YAML-formatted file.
+
+# Image configuration
+image:
+  repository: ghcr.io/sdaberdaku/nodereaper
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+# Image pull secrets for private registries
+imagePullSecrets: []
+# - name: myregistrykey
+
+# NodeReaper configuration
+config:
+  # Minimum age before a node can be deleted (e.g., 10m, 1h, 30s)
+  nodeMinAge: "10m"
+
+  # Enable dry-run mode (only log actions, don't actually delete nodes)
+  dryRun: false
+
+  # Logging level (DEBUG, INFO, WARNING, ERROR)
+  logLevel: "INFO"
+
+  # Cluster name for notifications (defaults to "unknown" if not set)
+  clusterName: ""
+
+  # Node label selector to filter which nodes to consider for deletion
+  # Format: "key1=value1,key2=value2" or empty string for all nodes
+  # Examples:
+  #   "cleanup-enabled=true" (only nodes with cleanup enabled)
+  #   "instance-type=m5.large" (only m5.large instances)
+  #   "zone=us-west-2a,instance-type=m5.large" (multiple labels)
+  nodeLabelSelector: ""
+
+# CronJob configuration
+cronjob:
+  # Schedule in cron format (default: every 10 minutes)
+  schedule: "*/10 * * * *"
+
+  # Number of successful finished jobs to retain
+  successfulJobsHistoryLimit: 3
+
+  # Number of failed finished jobs to retain
+  failedJobsHistoryLimit: 1
+
+  # Deadline in seconds for starting the job if it misses scheduled time
+  startingDeadlineSeconds: 300
+
+  # Concurrency policy (Allow, Forbid, Replace)
+  concurrencyPolicy: Forbid
+
+  # Restart policy for the job pods
+  restartPolicy: OnFailure
+
+# Slack notifications
+slack:
+  # Enable Slack notifications
+  enabled: false
+
+  # Slack webhook URL (can be set via existing secret)
+  webhookUrl: ""
+
+  # Use existing secret for webhook URL
+  existingSecret:
+    name: ""
+    key: "slack-webhook-url"
+
+# Service account configuration
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+
+  # Annotations to add to the service account
+  annotations: {}
+
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+# RBAC configuration
+rbac:
+  # Specifies whether RBAC resources should be created
+  create: true
+
+# Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  runAsGroup: 65534
+  fsGroup: 65534
+
+# Container security context
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 65534
+
+# Resource limits and requests
+resources:
+  limits:
+    cpu: 200m
+    memory: 128Mi
+  requests:
+    cpu: 100m
+    memory: 64Mi
+
+# Node selector for pod assignment
+nodeSelector: {}
+
+# Tolerations for pod assignment
+tolerations: []
+
+# Affinity for pod assignment
+affinity: {}
+
+# Pod annotations
+podAnnotations: {}
+
+# Pod labels
+podLabels: {}

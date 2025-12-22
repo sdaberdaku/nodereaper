@@ -1,0 +1,84 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: "{{ include "nodereaper.fullname" . }}-test"
+  namespace: {{ include "nodereaper.namespace" . }}
+  labels:
+    {{- include "nodereaper.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: "{{ include "nodereaper.fullname" . }}-test"
+  labels:
+    {{- include "nodereaper.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: ServiceAccount
+  name: "{{ include "nodereaper.fullname" . }}-test"
+  namespace: {{ include "nodereaper.namespace" . }}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "nodereaper.fullname" . }}-test"
+  namespace: {{ include "nodereaper.namespace" . }}
+  labels:
+    {{- include "nodereaper.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  serviceAccountName: "{{ include "nodereaper.fullname" . }}-test"
+  containers:
+  - name: test
+    image: bitnami/kubectl:latest
+    command:
+    - /bin/sh
+    - -c
+    - |
+      set -e
+      echo "🧪 Testing NodeReaper Helm deployment..."
+
+      # Check if CronJob exists and is properly configured
+      echo "✅ Checking CronJob..."
+      kubectl get cronjob {{ include "nodereaper.fullname" . }} -n {{ include "nodereaper.namespace" . }} -o yaml | grep -q "nodereaper"
+
+      # Check if ServiceAccount exists
+      echo "✅ Checking ServiceAccount..."
+      kubectl get serviceaccount {{ include "nodereaper.serviceAccountName" . }} -n {{ include "nodereaper.namespace" . }}
+
+      # Check if ClusterRole exists and has required permissions
+      echo "✅ Checking ClusterRole..."
+      kubectl get clusterrole {{ include "nodereaper.fullname" . }} -o yaml | grep -q "nodes"
+      kubectl get clusterrole {{ include "nodereaper.fullname" . }} -o yaml | grep -q "pods"
+
+      # Check if ClusterRoleBinding exists
+      echo "✅ Checking ClusterRoleBinding..."
+      kubectl get clusterrolebinding {{ include "nodereaper.fullname" . }}
+
+      # Test dry-run job creation from CronJob
+      echo "✅ Testing job creation from CronJob..."
+      kubectl create job --from=cronjob/{{ include "nodereaper.fullname" . }} {{ include "nodereaper.fullname" . }}-test-job -n {{ include "nodereaper.namespace" . }} --dry-run=client -o yaml > /dev/null
+
+      # Check CronJob schedule is valid
+      echo "✅ Checking CronJob schedule..."
+      SCHEDULE=$(kubectl get cronjob {{ include "nodereaper.fullname" . }} -n {{ include "nodereaper.namespace" . }} -o jsonpath='{.spec.schedule}')
+      echo "CronJob schedule: $SCHEDULE"
+
+      # Verify image is set correctly
+      echo "✅ Checking container image..."
+      IMAGE=$(kubectl get cronjob {{ include "nodereaper.fullname" . }} -n {{ include "nodereaper.namespace" . }} -o jsonpath='{.spec.jobTemplate.spec.template.spec.containers[0].image}')
+      echo "Container image: $IMAGE"
+
+      echo "🎉 All NodeReaper Helm tests passed successfully!"

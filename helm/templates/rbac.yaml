@@ -1,0 +1,30 @@
+{{- if .Values.rbac.create -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "nodereaper.fullname" . }}
+  labels:
+    {{- include "nodereaper.labels" . | nindent 4 }}
+rules:
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list", "delete"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "nodereaper.fullname" . }}
+  labels:
+    {{- include "nodereaper.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "nodereaper.fullname" . }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "nodereaper.serviceAccountName" . }}
+  namespace: {{ include "nodereaper.namespace" . }}
+{{- end }}

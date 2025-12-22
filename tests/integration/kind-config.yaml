@@ -1,0 +1,32 @@
+# Kind cluster configuration for NodeReaper integration tests
+# Creates a multi-node cluster to simulate real-world scenarios
+
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: nodereaper-test
+
+# Multi-node configuration
+nodes:
+  # Control plane node
+  - role: control-plane
+    labels:
+      test-environment: integration
+
+  # Worker nodes with different labels for testing
+  - role: worker
+    labels:
+      instance-type: m5.large
+      zone: us-west-2a
+      cleanup-enabled: "true"
+
+  - role: worker
+    labels:
+      instance-type: m5.xlarge
+      zone: us-west-2b
+      cleanup-enabled: "true"
+
+  - role: worker
+    labels:
+      instance-type: m5.large
+      zone: us-west-2a
+      cleanup-enabled: "false"

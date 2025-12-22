@@ -1,0 +1,75 @@
+# Production values for nodereaper
+# Override default values for production deployment
+
+image:
+  repository: ghcr.io/sdaberdaku/nodereaper
+  tag: "v1.0.0"
+  pullPolicy: Always
+
+imagePullSecrets:
+  - name: registry-secret
+
+config:
+  nodeMinAge: "15m"  # More conservative in production
+  dryRun: false      # Actually delete nodes in production
+  logLevel: "INFO"
+  clusterName: "production-cluster"  # Set your cluster name
+  # Only target nodes with cleanup enabled in production
+  nodeLabelSelector: "cleanup-enabled=true"
+
+cronjob:
+  schedule: "*/15 * * * *"  # Every 15 minutes in production
+  successfulJobsHistoryLimit: 5
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 600
+
+slack:
+  enabled: true
+  existingSecret:
+    name: slack-webhook-secret
+    key: webhook-url
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 256Mi
+  requests:
+    cpu: 200m
+    memory: 128Mi
+
+# Production security settings
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  runAsGroup: 65534
+  fsGroup: 65534
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 65534
+
+# Production node placement
+nodeSelector:
+  kubernetes.io/os: linux
+  node-role.kubernetes.io/control-plane: ""
+
+tolerations:
+  - key: node-role.kubernetes.io/control-plane
+    operator: Exists
+    effect: NoSchedule
+
+affinity:
+  nodeAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      preference:
+        matchExpressions:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
