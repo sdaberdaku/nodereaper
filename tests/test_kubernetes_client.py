@@ -91,7 +91,7 @@ class TestKubernetesClient(unittest.TestCase):
         result = self.client.delete_node("test-node")
 
         self.assertTrue(result)
-        self.client.v1.delete_node.assert_called_once_with(name="test-node")
+        self.client.v1.delete_node.assert_called_once_with(name="test-node", grace_period_seconds=0)
 
     def test_delete_node_failure(self):
         """Test failed node deletion."""

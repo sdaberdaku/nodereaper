@@ -75,13 +75,14 @@ class KubernetesClient:
             raise
 
     def delete_node(self, node_name: str) -> bool:
-        """Delete a node from the cluster."""
+        """Delete a node from the cluster with force deletion."""
         try:
-            self.v1.delete_node(name=node_name)
-            self.logger.info(f"Successfully deleted node {node_name}")
+            # Force delete with grace period of 0 seconds
+            self.v1.delete_node(name=node_name, grace_period_seconds=0)
+            self.logger.info(f"Successfully force deleted node {node_name}")
             return True
         except ApiException as e:
-            self.logger.error(f"Failed to delete node {node_name}: {e}")
+            self.logger.error(f"Failed to force delete node {node_name}: {e}")
             return False
 
     def test_connectivity(self) -> bool:
