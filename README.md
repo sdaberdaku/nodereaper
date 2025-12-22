@@ -5,73 +5,30 @@
 [![Version](https://img.shields.io/github/v/release/sdaberdaku/nodereaper)](https://github.com/sdaberdaku/nodereaper/releases)
 [![Docker Image](https://img.shields.io/badge/Docker-GHCR-blue)](https://github.com/sdaberdaku/nodereaper/pkgs/container/nodereaper)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Helm Chart](https://img.shields.io/badge/Helm-Chart-blue)](https://github.com/sdaberdaku/nodereaper/releases)
 
 **A cost-saving failsafe for Kubernetes clusters that automatically cleans up empty nodes when autoscalers fail.**
 
-Sometimes Kubernetes autoscalers (Cluster Autoscaler, Karpenter, etc.) fail to scale down expensive nodes, leaving them running with only system pods. This can result in significant unnecessary cloud costs, especially with large instance types that should have been terminated hours or days ago.
-
-NodeReaper acts as a **reliable failsafe** that detects and removes these "zombie" nodes, ensuring your cluster doesn't accumulate costly empty nodes when autoscaling doesn't work as expected.
-
-## Why NodeReaper?
-
-**💰 Cost Optimization**: Prevent expensive nodes from running indefinitely when autoscalers fail
-**🛡️ Failsafe Protection**: Works alongside (not instead of) your existing autoscaler
-**🎯 Smart Detection**: Only removes truly empty nodes (with just DaemonSet pods)
-**⚡ Battle-tested**: Production-ready with comprehensive safety checks
+Sometimes autoscalers (Cluster Autoscaler, Karpenter, etc.) fail to scale down expensive nodes, leaving them running with only system pods. NodeReaper acts as a **reliable failsafe** that detects and removes these "zombie" nodes.
 
 ## Features
 
 - **Empty node detection** - Identifies nodes with only DaemonSet pods
 - **Cost-saving failsafe** - Catches nodes that autoscalers missed
 - **Age-based policy** - Avoids deleting newly provisioned nodes
-- **Karpenter integration** - Respects Karpenter deletion markers
+- **Autoscaler integration** - Respects deletion markers from any autoscaler
 - **Unreachable node handling** - Cleans up nodes in Unknown state
-- **Label filtering** - Target specific nodes using label selectors
+- **Protection system** - Multiple layers of protection via annotations and labels
+- **Finalizer cleanup** - Intelligent cleanup of stuck finalizers
 - **Slack notifications** - Get notified when nodes are deleted
 - **Dry-run mode** - Test safely before enabling deletions
-- **Multi-arch support** - AMD64 and ARM64 Docker images
 
-## Common Scenarios
-
-NodeReaper helps in these real-world situations:
-
-**🔥 Autoscaler Bugs**: Cluster Autoscaler or Karpenter fails to scale down due to bugs, misconfigurations, or edge cases
-**⏰ Timing Issues**: Nodes become empty after the autoscaler's evaluation window
-**🚫 Blocked Scale-down**: PodDisruptionBudgets or other policies prevent normal autoscaling
-**💥 Workload Crashes**: Applications crash leaving nodes empty, but autoscaler doesn't react quickly
-**🔧 Maintenance Windows**: Nodes emptied during maintenance but not cleaned up afterward
-**💸 Cost Alerts**: You notice high cloud bills from nodes that should have been terminated
-
-**Real Example**: A `c5.24xlarge` instance ($3.456/hour) gets stuck empty for a weekend due to an autoscaler bug. NodeReaper would have saved you **$166** by cleaning it up automatically.
-
-## Installation
-
-### Helm (Recommended)
+## Quick Start
 
 ```bash
-# Install from OCI registry (recommended)
+# Install with Helm
 helm install nodereaper oci://ghcr.io/sdaberdaku/charts/nodereaper \
   --namespace nodereaper \
   --create-namespace
-
-# Or install from GitHub releases
-helm install nodereaper https://github.com/sdaberdaku/nodereaper/releases/latest/download/nodereaper-1.0.0.tgz \
-  --namespace nodereaper \
-  --create-namespace
-```
-
-### Production Setup
-
-```bash
-helm install nodereaper oci://ghcr.io/sdaberdaku/charts/nodereaper \
-  --namespace nodereaper \
-  --create-namespace \
-  --set config.dryRun=false \
-  --set config.nodeMinAge=15m \
-  --set config.nodeLabelSelector="cleanup-enabled=true" \
-  --set slack.enabled=true \
-  --set slack.webhookUrl="https://hooks.slack.com/services/YOUR/WEBHOOK"
 ```
 
 ## Configuration
@@ -81,153 +38,144 @@ helm install nodereaper oci://ghcr.io/sdaberdaku/charts/nodereaper \
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `config.nodeMinAge` | Minimum node age before deletion | `10m` |
+| `config.deletionTimeout` | Timeout before taking over marked nodes | `15m` |
+| `config.deletionTaints` | List of exact taint keys indicating deletion | See below |
+| `config.protectionAnnotations` | Map of annotation key-value pairs providing protection | See below |
+| `config.protectionLabels` | Map of label key-value pairs providing protection | See below |
+| `config.enableFinalizerCleanup` | Enable finalizer cleanup for stuck nodes | `true` |
+| `config.finalizerTimeout` | Timeout before removing stuck finalizers | `5m` |
+| `config.finalizerWhitelist` | List of exact finalizer names safe to remove | See below |
+| `config.finalizerBlacklist` | List of exact finalizer names never to remove | `[]` |
 | `config.dryRun` | Enable dry-run mode (no actual deletions) | `false` |
-| `config.clusterName` | Cluster name for notifications (shows "unknown" if not set) | `""` |
-| `config.nodeLabelSelector` | Label selector to filter nodes | `""` |
-| `cronjob.schedule` | Cron schedule for execution | `*/10 * * * *` |
-| `slack.enabled` | Enable Slack notifications | `false` |
-| `slack.webhookUrl` | Slack webhook URL | `""` |
+| `config.nodeLabelSelector` | Map of key-value pairs to filter nodes | `{}` |
 
-### Cluster Name Configuration
+### Protection System
 
-Set the cluster name for notifications and logging:
-```bash
---set config.clusterName="my-production-cluster"
+NodeReaper uses **exact matching** for all protection and deletion markers:
+
+```yaml
+config:
+  # Exact taint keys that indicate deletion (no pattern matching)
+  deletionTaints:
+    - "karpenter.sh/disrupted"
+    - "node.kubernetes.io/unreachable"
+    - "node.kubernetes.io/unschedulable"
+
+  # Exact annotation key-value pairs that provide protection
+  protectionAnnotations:
+    "karpenter.sh/do-not-evict": "true"
+    "cluster-autoscaler.kubernetes.io/scale-down-disabled": "true"
+    "nodereaper.io/do-not-delete": "true"
+
+  # Exact label key-value pairs that provide protection
+  protectionLabels:
+    "karpenter.sh/do-not-evict": "true"
+    "cluster-autoscaler.kubernetes.io/scale-down-disabled": "true"
+    "nodereaper.io/do-not-delete": "true"
 ```
 
-If not set, notifications will show "unknown" as the cluster name.
+### Finalizer Management
 
-### RBAC Permissions
+```yaml
+config:
+  # Enable intelligent finalizer cleanup
+  enableFinalizerCleanup: true
 
-NodeReaper requires these minimal cluster-level permissions:
-- **nodes**: `get`, `list`, `delete` - Core functionality
-- **pods**: `get`, `list` - Check what's running on nodes
+  # How long to wait before cleaning up stuck finalizers
+  finalizerTimeout: "5m"
 
-The Helm chart automatically creates the required RBAC resources.
+  # Exact finalizer names safe to remove (whitelist approach)
+  finalizerWhitelist:
+    - "karpenter.sh/termination"
+    - "node.kubernetes.io/exclude-from-external-load-balancers"
 
-### Node Label Filtering
+  # Exact finalizer names never to remove (blacklist approach)
+  finalizerBlacklist: []
+```
 
-Target specific nodes using label selectors:
+**How it works:**
+- Nodes with **protection annotations or labels** are never deleted
+- Nodes with **deletion taints** are protected for `deletionTimeout` duration
+- After timeout expires, NodeReaper takes over if the node meets deletion criteria
+- Stuck finalizers are cleaned up based on whitelist/blacklist configuration
 
-```bash
-# Only nodes with cleanup enabled
---set config.nodeLabelSelector="cleanup-enabled=true"
+### Advanced Configuration
 
-# Specific instance type
---set config.nodeLabelSelector="instance-type=m5.large"
+#### CronJob Settings
+```yaml
+cronjob:
+  schedule: "*/10 * * * *"              # Run every 10 minutes
+  successfulJobsHistoryLimit: 3         # Keep 3 successful job logs
+  failedJobsHistoryLimit: 1             # Keep 1 failed job log
+  startingDeadlineSeconds: 300          # Job start deadline
+  concurrencyPolicy: Forbid             # Don't run concurrent jobs
+```
 
-# Multiple labels (AND logic)
---set config.nodeLabelSelector="zone=us-west-2a,cleanup-enabled=true"
+#### Slack Notifications
+```yaml
+slack:
+  enabled: true
+  webhookUrl: "https://hooks.slack.com/services/YOUR/WEBHOOK"
+
+  # Or use existing secret
+  existingSecret:
+    name: "slack-webhook"
+    key: "webhook-url"
+```
+
+#### Node Filtering
+```yaml
+config:
+  # Only consider nodes with these labels for deletion
+  nodeLabelSelector:
+    cleanup-enabled: "true"
+    instance-type: "m5.large"
+    zone: "us-west-2a"
+
+  # Set cluster name for notifications
+  clusterName: "production-cluster"
 ```
 
 ## How It Works
 
-NodeReaper runs as a **failsafe** alongside your existing autoscaler:
-
 🔍 **Discovery**: Scans all nodes in the cluster (or filtered by labels)
-⏳ **Safety Check**: Skips nodes that are too young or marked by Karpenter
+⏳ **Safety Check**: Skips nodes that are too young or protected by annotations/labels
 🎯 **Smart Detection**: Identifies truly empty nodes (only DaemonSet pods running)
+⚖️ **Autoscaler Respect**: Honors deletion markers from any autoscaler for configured timeout
 🗑️ **Clean Removal**: Safely deletes empty nodes that autoscalers missed
+🔧 **Finalizer Cleanup**: Removes stuck finalizers from terminating nodes
 📢 **Notification**: Alerts you via Slack when nodes are cleaned up
 
-**Safety First**: NodeReaper is designed to be conservative - it will never delete nodes with actual workloads, only those that should have been cleaned up already.
+### Deletion Reasons
 
-### Detailed Process
+NodeReaper provides clear reasons for each deletion:
 
-1. **Lists nodes** in the cluster (filtered by labels if configured)
-2. **Skips nodes** that are:
-   - Younger than `nodeMinAge` (default: 10 minutes)
-   - Already marked for deletion by Karpenter
-   - Have non-DaemonSet workloads running
-3. **Deletes nodes** that are:
-   - Unreachable (Ready status = Unknown)
-   - Empty (only running DaemonSet pods like kube-proxy, CNI, monitoring agents)
+- **`empty`** - Node only has DaemonSet pods running
+- **`unreachable`** - Node is in Unknown state (likely failed)
+- **`unschedulable`** - Node is cordoned (has unschedulable taint)
+- **`takeover-empty`** - Taking over deletion of empty node from autoscaler (after timeout)
+- **`takeover-unreachable`** - Taking over deletion of unreachable node from autoscaler
+- **`takeover-unschedulable`** - Taking over deletion of unschedulable node from autoscaler
 
 ## Development
 
-### Setup
-
 ```bash
+# Setup
 git clone https://github.com/sdaberdaku/nodereaper.git
 cd nodereaper
 make install-dev
-```
 
-### Testing
+# Testing
+make test              # Unit tests
+make test-integration  # Integration tests with kind
+make test-all          # All tests
+make checks            # Quality checks
 
-```bash
-# Run unit tests
-make test
-
-# Run integration tests with kind
-make test-integration
-
-# Run Helm chart tests (includes helm test)
-make test-helm
-
-# Run all tests
-make test-all
-
-# Run quality checks (lint + test + helm checks)
-make checks
-```
-
-### Development
-
-```bash
-# Set up development environment
-make dev-setup
-
-# See all available commands
-make help
-
-# Format code
-make format
-
-# Set up test cluster
-make setup-cluster
-
-# Clean up everything
-make cleanup
-```
-
-### Manual Testing
-
-```bash
-# Set up test cluster
-make setup-test-cluster
-
-# Test NodeReaper in dry-run mode
+# Local testing
+make setup-cluster     # Set up kind cluster
 DRY_RUN=true LOG_LEVEL=DEBUG nodereaper
-
-# Clean up everything
-scripts/cleanup.sh
-
-# Clean up only Helm release
-scripts/cleanup.sh --helm-only
-
-# Clean up only kind cluster
-scripts/cleanup.sh --cluster-only
 ```
-
-## Docker Images
-
-Multi-architecture images are available at:
-```
-ghcr.io/sdaberdaku/nodereaper:latest
-ghcr.io/sdaberdaku/nodereaper:v1.0.0
-```
-
-Supported platforms: `linux/amd64`, `linux/arm64`
 
 ## License
 
 Apache License 2.0 - see [LICENSE](LICENSE) for details.
-
-## Contributing
-
-Contributions are welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Run `make all-checks` before committing
-4. Submit a pull request

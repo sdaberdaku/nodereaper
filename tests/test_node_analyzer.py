@@ -14,13 +14,30 @@ class TestNodeAnalyzer(unittest.TestCase):
 
     def setUp(self):
         """Set up test environment."""
-        self.analyzer = NodeAnalyzer(min_age=timedelta(minutes=10))
+        self.analyzer = NodeAnalyzer(
+            min_age=timedelta(minutes=10),
+            deletion_timeout=timedelta(minutes=15),
+            deletion_taints=[
+                "karpenter.sh/disrupted",
+                "cluster-autoscaler.kubernetes.io/scale-down",
+                "node.kubernetes.io/unschedulable",
+            ],
+            protection_annotations={
+                "karpenter.sh/do-not-evict": "true",
+                "nodereaper.io/do-not-delete": "true",
+            },
+            protection_labels={
+                "karpenter.sh/do-not-evict": "true",
+                "nodereaper.io/do-not-delete": "true",
+            },
+        )
 
     def _create_mock_node(
         self,
         name: str,
         age_minutes: int = 15,
         annotations: dict = None,
+        labels: dict = None,
         taints: list = None,
         ready_status: str = "True",
     ) -> client.V1Node:
@@ -31,6 +48,7 @@ class TestNodeAnalyzer(unittest.TestCase):
         node.metadata.name = name
         node.metadata.creation_timestamp = creation_time
         node.metadata.annotations = annotations or {}
+        node.metadata.labels = labels or {}
         node.spec.taints = taints or []
 
         # Mock node conditions
@@ -73,29 +91,89 @@ class TestNodeAnalyzer(unittest.TestCase):
         self.assertTrue(should_delete)
         self.assertEqual(reason, "empty")
 
-    def test_karpenter_marked_node(self):
-        """Test that Karpenter-marked nodes are not deleted."""
-        # Test with annotation
-        karpenter_node = self._create_mock_node(
-            "karpenter-node", annotations={"karpenter.sh/do-not-evict": "true"}
+    def test_protected_node(self):
+        """Test that nodes with protection annotations are not deleted."""
+        # Test with protection annotation
+        protected_node = self._create_mock_node(
+            "protected-node", annotations={"karpenter.sh/do-not-evict": "true"}
         )
 
-        should_delete, reason = self.analyzer.should_delete_node(karpenter_node, [])
+        should_delete, reason = self.analyzer.should_delete_node(protected_node, [])
 
         self.assertFalse(should_delete)
         self.assertEqual(reason, "")
 
-        # Test with taint
+        # Test with custom protection annotation
+        custom_protected_node = self._create_mock_node(
+            "custom-protected-node", annotations={"nodereaper.io/do-not-delete": "true"}
+        )
+
+        should_delete, reason = self.analyzer.should_delete_node(custom_protected_node, [])
+
+        self.assertFalse(should_delete)
+        self.assertEqual(reason, "")
+
+    def test_protected_node_labels(self):
+        """Test that nodes with protection labels are not deleted."""
+        # Test with protection label
+        protected_node = self._create_mock_node(
+            "protected-node", labels={"karpenter.sh/do-not-evict": "true"}
+        )
+
+        should_delete, reason = self.analyzer.should_delete_node(protected_node, [])
+
+        self.assertFalse(should_delete)
+        self.assertEqual(reason, "")
+
+        # Test with custom protection label
+        custom_protected_node = self._create_mock_node(
+            "custom-protected-node", labels={"nodereaper.io/do-not-delete": "true"}
+        )
+
+        should_delete, reason = self.analyzer.should_delete_node(custom_protected_node, [])
+
+        self.assertFalse(should_delete)
+        self.assertEqual(reason, "")
+
+        # Test with wrong label value (should not be protected)
+        wrong_value_node = self._create_mock_node(
+            "wrong-value-node", labels={"karpenter.sh/do-not-evict": "false"}
+        )
+
+        should_delete, reason = self.analyzer.should_delete_node(wrong_value_node, [])
+
+        self.assertTrue(should_delete)  # Should be deleted because it's empty
+        self.assertEqual(reason, "empty")
+
+    def test_deletion_marked_node_with_timeout(self):
+        """Test that nodes marked for deletion are protected for timeout period."""
+        # Test with deletion taint - should be protected initially
         taint = MagicMock()
-        taint.key = "karpenter.sh/disruption"
+        taint.key = "karpenter.sh/disrupted"
         taint.effect = "NoSchedule"
+        taint.time_added = datetime.now(timezone.utc) - timedelta(minutes=5)  # 5 minutes ago
 
-        karpenter_node_taint = self._create_mock_node("karpenter-node-taint", taints=[taint])
+        marked_node = self._create_mock_node("marked-node", taints=[taint])
 
-        should_delete, reason = self.analyzer.should_delete_node(karpenter_node_taint, [])
+        should_delete, reason = self.analyzer.should_delete_node(marked_node, [])
 
+        # Should be protected because it's within the 15-minute timeout
         self.assertFalse(should_delete)
         self.assertEqual(reason, "")
+
+        # Test with old deletion taint - should be taken over
+        old_taint = MagicMock()
+        old_taint.key = "karpenter.sh/disrupted"
+        old_taint.effect = "NoSchedule"
+        old_taint.time_added = datetime.now(timezone.utc) - timedelta(minutes=20)  # 20 minutes ago
+
+        old_marked_node = self._create_mock_node("old-marked-node", taints=[old_taint])
+
+        should_delete, reason = self.analyzer.should_delete_node(old_marked_node, [])
+
+        # Should be deleted because timeout has expired and node is empty
+        self.assertTrue(should_delete)
+        self.assertEqual(reason, "takeover-empty")
 
     def test_unreachable_node(self):
         """Test that unreachable nodes are deleted."""
@@ -112,6 +190,7 @@ class TestNodeAnalyzer(unittest.TestCase):
         unschedulable_taint = MagicMock()
         unschedulable_taint.key = "node.kubernetes.io/unschedulable"
         unschedulable_taint.effect = "NoSchedule"
+        unschedulable_taint.time_added = None  # No timestamp for unschedulable taint
 
         unschedulable_node = self._create_mock_node(
             "unschedulable-node", taints=[unschedulable_taint]
@@ -128,6 +207,7 @@ class TestNodeAnalyzer(unittest.TestCase):
         unschedulable_taint = MagicMock()
         unschedulable_taint.key = "node.kubernetes.io/unschedulable"
         unschedulable_taint.effect = "NoSchedule"
+        unschedulable_taint.time_added = None  # No timestamp for unschedulable taint
 
         unschedulable_node = self._create_mock_node(
             "unschedulable-node", taints=[unschedulable_taint]
@@ -186,15 +266,15 @@ class TestNodeAnalyzer(unittest.TestCase):
         self.assertTrue(self.analyzer._is_daemonset_pod(daemonset_pod))
         self.assertFalse(self.analyzer._is_daemonset_pod(deployment_pod))
 
-    def test_is_node_unschedulable(self):
-        """Test unschedulable node detection."""
+    def test_has_unschedulable_taint(self):
+        """Test unschedulable taint detection."""
         # Test with correct unschedulable taint
         unschedulable_taint = MagicMock()
         unschedulable_taint.key = "node.kubernetes.io/unschedulable"
         unschedulable_taint.effect = "NoSchedule"
 
         unschedulable_node = self._create_mock_node("unschedulable", taints=[unschedulable_taint])
-        self.assertTrue(self.analyzer._is_node_unschedulable(unschedulable_node))
+        self.assertTrue(self.analyzer._has_unschedulable_taint(unschedulable_node))
 
         # Test with wrong effect
         wrong_effect_taint = MagicMock()
@@ -202,7 +282,7 @@ class TestNodeAnalyzer(unittest.TestCase):
         wrong_effect_taint.effect = "NoExecute"
 
         wrong_effect_node = self._create_mock_node("wrong-effect", taints=[wrong_effect_taint])
-        self.assertFalse(self.analyzer._is_node_unschedulable(wrong_effect_node))
+        self.assertFalse(self.analyzer._has_unschedulable_taint(wrong_effect_node))
 
         # Test with wrong key
         wrong_key_taint = MagicMock()
@@ -210,15 +290,15 @@ class TestNodeAnalyzer(unittest.TestCase):
         wrong_key_taint.effect = "NoSchedule"
 
         wrong_key_node = self._create_mock_node("wrong-key", taints=[wrong_key_taint])
-        self.assertFalse(self.analyzer._is_node_unschedulable(wrong_key_node))
+        self.assertFalse(self.analyzer._has_unschedulable_taint(wrong_key_node))
 
         # Test with no taints
         no_taints_node = self._create_mock_node("no-taints", taints=[])
-        self.assertFalse(self.analyzer._is_node_unschedulable(no_taints_node))
+        self.assertFalse(self.analyzer._has_unschedulable_taint(no_taints_node))
 
         # Test with None taints
         none_taints_node = self._create_mock_node("none-taints", taints=None)
-        self.assertFalse(self.analyzer._is_node_unschedulable(none_taints_node))
+        self.assertFalse(self.analyzer._has_unschedulable_taint(none_taints_node))
 
     def test_format_age(self):
         """Test age formatting."""

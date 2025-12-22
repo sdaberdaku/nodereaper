@@ -116,6 +116,26 @@ class TestSlackNotifier(unittest.TestCase):
         self.assertIn("unschedulable", message)
         self.assertIn("🗑️", message)
 
+    def test_format_message_takeover(self):
+        """Test message formatting for takeover deletion."""
+        node_info = {
+            "name": "stuck-node",
+            "age": "30m",
+            "cluster": "prod-cluster",
+            "instance_type": "m5.2xlarge",
+            "zone": "us-west-2b",
+        }
+
+        message = self.notifier._format_message(node_info, "takeover-empty")
+
+        self.assertIn("stuck-node", message)
+        self.assertIn("30m", message)
+        self.assertIn("prod-cluster", message)
+        self.assertIn("m5.2xlarge", message)
+        self.assertIn("us-west-2b", message)
+        self.assertIn("takeover-empty", message)
+        self.assertIn("🗑️", message)
+
 
 class TestNotificationManager(unittest.TestCase):
     """Test cases for NotificationManager class."""

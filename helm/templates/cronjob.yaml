@@ -43,19 +43,45 @@ spec:
             imagePullPolicy: {{ .Values.image.pullPolicy }}
             command: ["nodereaper"]
             env:
-            - name: NODE_MIN_AGE
-              value: {{ .Values.config.nodeMinAge | quote }}
-            - name: DRY_RUN
-              value: {{ .Values.config.dryRun | quote }}
-            - name: LOG_LEVEL
-              value: {{ .Values.config.logLevel | quote }}
+            - name: ENABLE_FINALIZER_CLEANUP
+              value: {{ .Values.config.enableFinalizerCleanup | quote }}
             {{- if .Values.config.clusterName }}
             - name: CLUSTER_NAME
               value: {{ .Values.config.clusterName | quote }}
             {{- end }}
+            {{- if .Values.config.deletionTaints }}
+            - name: DELETION_TAINTS
+              value: {{ join "," .Values.config.deletionTaints | quote }}
+            {{- end }}
+            - name: DELETION_TIMEOUT
+              value: {{ .Values.config.deletionTimeout | quote }}
+            - name: DRY_RUN
+              value: {{ .Values.config.dryRun | quote }}
+            {{- if .Values.config.finalizerBlacklist }}
+            - name: FINALIZER_BLACKLIST
+              value: {{ join "," .Values.config.finalizerBlacklist | quote }}
+            {{- end }}
+            - name: FINALIZER_TIMEOUT
+              value: {{ .Values.config.finalizerTimeout | quote }}
+            {{- if .Values.config.finalizerWhitelist }}
+            - name: FINALIZER_WHITELIST
+              value: {{ join "," .Values.config.finalizerWhitelist | quote }}
+            {{- end }}
+            - name: LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
+            - name: NODE_MIN_AGE
+              value: {{ .Values.config.nodeMinAge | quote }}
             {{- if .Values.config.nodeLabelSelector }}
             - name: NODE_LABEL_SELECTOR
-              value: {{ .Values.config.nodeLabelSelector | quote }}
+              value: {{ $pairs := list }}{{- range $key, $value := .Values.config.nodeLabelSelector }}{{- $pairs = append $pairs (printf "%s=%s" $key ($value | toString)) }}{{- end }}{{ join "," $pairs | quote }}
+            {{- end }}
+            {{- if .Values.config.protectionAnnotations }}
+            - name: PROTECTION_ANNOTATIONS
+              value: {{ $pairs := list }}{{ range $key, $value := .Values.config.protectionAnnotations }}{{ $pairs = append $pairs (printf "%s=%s" $key $value) }}{{ end }}{{ join "," $pairs | quote }}
+            {{- end }}
+            {{- if .Values.config.protectionLabels }}
+            - name: PROTECTION_LABELS
+              value: {{ $pairs := list }}{{ range $key, $value := .Values.config.protectionLabels }}{{ $pairs = append $pairs (printf "%s=%s" $key $value) }}{{ end }}{{ join "," $pairs | quote }}
             {{- end }}
             {{- if .Values.slack.enabled }}
             {{- if .Values.slack.existingSecret.name }}
@@ -76,12 +102,6 @@ spec:
             {{- end }}
             resources:
               {{- toYaml .Values.resources | nindent 14 }}
-            volumeMounts:
-            - name: tmp
-              mountPath: /tmp
-          volumes:
-          - name: tmp
-            emptyDir: {}
           {{- with .Values.nodeSelector }}
           nodeSelector:
             {{- toYaml . | nindent 12 }}

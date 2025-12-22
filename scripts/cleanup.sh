@@ -33,9 +33,42 @@ show_usage() {
     echo "  CLUSTER_NAME=my-test $0     # Use custom cluster name"
 }
 
+# Function to check if we're connected to the right cluster
+check_cluster() {
+    # Check if kubectl is available and cluster is reachable
+    if ! kubectl cluster-info &> /dev/null; then
+        echo "❌ Kubernetes cluster is not available"
+        return 1
+    fi
+
+    # Check if current context matches expected cluster name
+    current_context=$(kubectl config current-context 2>/dev/null || echo "")
+    if [[ -z "$current_context" ]]; then
+        echo "❌ No current Kubernetes context set"
+        return 1
+    fi
+
+    # For kind clusters, the context name is "kind-{cluster-name}"
+    expected_context="kind-${CLUSTER_NAME}"
+    if [[ "$current_context" != "$expected_context" ]]; then
+        echo "❌ Wrong cluster context. Expected: $expected_context, Current: $current_context"
+        echo "💡 Switch context with: kubectl config use-context $expected_context"
+        return 1
+    fi
+
+    echo "✅ Connected to correct cluster: $CLUSTER_NAME"
+    return 0
+}
+
 # Function to cleanup Helm release
 cleanup_helm() {
     echo "🧹 Cleaning up Helm release..."
+
+    # Verify we're connected to the right cluster before making changes
+    if ! check_cluster; then
+        echo "❌ Aborting cleanup - not connected to the correct cluster"
+        exit 1
+    fi
 
     if helm list -n "$NAMESPACE" | grep -q "$HELM_RELEASE"; then
         echo "📦 Uninstalling Helm release '$HELM_RELEASE' from namespace '$NAMESPACE'..."
