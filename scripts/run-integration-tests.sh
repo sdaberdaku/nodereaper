@@ -12,13 +12,29 @@ echo "🧪 Running NodeReaper integration tests..."
 
 # Function to check if cluster is available
 check_cluster() {
-    if kubectl cluster-info &> /dev/null; then
-        echo "✅ Kubernetes cluster is available"
-        return 0
-    else
+    # Check if kubectl is available and cluster is reachable
+    if ! kubectl cluster-info &> /dev/null; then
         echo "❌ Kubernetes cluster is not available"
         return 1
     fi
+
+    # Check if current context matches expected cluster name
+    current_context=$(kubectl config current-context 2>/dev/null || echo "")
+    if [[ -z "$current_context" ]]; then
+        echo "❌ No current Kubernetes context set"
+        return 1
+    fi
+
+    # For kind clusters, the context name is "kind-{cluster-name}"
+    expected_context="kind-${CLUSTER_NAME}"
+    if [[ "$current_context" != "$expected_context" ]]; then
+        echo "❌ Wrong cluster context. Expected: $expected_context, Current: $current_context"
+        echo "💡 Switch context with: kubectl config use-context $expected_context"
+        return 1
+    fi
+
+    echo "✅ Kubernetes cluster '$CLUSTER_NAME' is available and active"
+    return 0
 }
 
 # Function to verify test cluster

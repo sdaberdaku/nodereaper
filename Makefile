@@ -117,7 +117,9 @@ helm-install:
 helm-install-prod:
 	helm upgrade --install nodereaper $(HELM_CHART) \
 		--namespace nodereaper --create-namespace \
-		--values $(HELM_CHART)/values-production.yaml
+		--set config.dryRun=false \
+		--set config.enableFinalizerCleanup=true \
+		--set config.finalizerTimeout=10m
 
 .PHONY: helm-uninstall
 helm-uninstall:

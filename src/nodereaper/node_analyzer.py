@@ -17,9 +17,20 @@ from kubernetes import client
 class NodeAnalyzer:
     """Analyzes nodes to determine if they should be deleted."""
 
-    def __init__(self, min_age: timedelta):
+    def __init__(
+        self,
+        min_age: timedelta,
+        deletion_timeout: timedelta = None,
+        deletion_taints: list[str] = None,
+        protection_annotations: dict[str, str] = None,
+        protection_labels: dict[str, str] = None,
+    ):
         """Initialize node analyzer."""
         self.min_age = min_age
+        self.deletion_timeout = deletion_timeout or timedelta(minutes=15)
+        self.deletion_taints = deletion_taints or []
+        self.protection_annotations = protection_annotations or {}
+        self.protection_labels = protection_labels or {}
         self.logger = logging.getLogger(__name__)
 
     def should_delete_node(self, node: client.V1Node, pods: List[client.V1Pod]) -> Tuple[bool, str]:
@@ -37,25 +48,48 @@ class NodeAnalyzer:
             self.logger.debug(f"Node {node_name} is too young ({self._format_age(age)}), skipping")
             return False, ""
 
-        # Check Karpenter markers
-        if self._is_karpenter_marked(node):
-            self.logger.debug(f"Node {node_name} is marked by Karpenter, skipping")
-            return False, ""
+        # Check deletion markers with timeout
+        marked_for_deletion, marking_age = self._is_marked_for_deletion(node)
+        if marked_for_deletion:
+            # If marking_age is None, it means permanent protection (no timeout)
+            if marking_age is None:
+                self.logger.debug(f"Node {node_name} has permanent protection annotation, skipping")
+                return False, ""
+
+            # Special case: unschedulable nodes should be deleted immediately regardless of timeout
+            if self._has_unschedulable_taint(node):
+                self.logger.info(
+                    f"Node {node_name} is unschedulable, marking for immediate deletion"
+                )
+                return True, "unschedulable"
+
+            elif marking_age < self.deletion_timeout:
+                self.logger.debug(
+                    f"Node {node_name} is marked for deletion for {self._format_age(marking_age)} "
+                    f"(timeout: {self._format_age(self.deletion_timeout)}), skipping"
+                )
+                return False, ""
+            else:
+                self.logger.info(
+                    f"Node {node_name} marked for deletion for {self._format_age(marking_age)} "
+                    f"(timeout: {self._format_age(self.deletion_timeout)}), taking over deletion"
+                )
+                # Continue with normal deletion logic, but track that we're taking over
+                taking_over_deletion = True
+        else:
+            taking_over_deletion = False
 
         # Check if unreachable
         if self._is_node_unreachable(node):
+            reason = "takeover-unreachable" if taking_over_deletion else "unreachable"
             self.logger.info(f"Node {node_name} is unreachable, marking for deletion")
-            return True, "unreachable"
-
-        # Check if unschedulable (cordoned)
-        if self._is_node_unschedulable(node):
-            self.logger.info(f"Node {node_name} is unschedulable, marking for deletion")
-            return True, "unschedulable"
+            return True, reason
 
         # Check if empty
         if self._is_node_empty(pods):
+            reason = "takeover-empty" if taking_over_deletion else "empty"
             self.logger.info(f"Node {node_name} is empty, marking for deletion")
-            return True, "empty"
+            return True, reason
 
         self.logger.debug(f"Node {node_name} has workloads, keeping")
         return False, ""
@@ -83,20 +117,54 @@ class NodeAnalyzer:
         else:
             return f"{total_seconds // 86400}d"
 
-    def _is_karpenter_marked(self, node: client.V1Node) -> bool:
-        """Check if node is marked for deletion by Karpenter."""
-        # Check annotations
-        annotations = node.metadata.annotations or {}
-        if any(key.startswith("karpenter.sh/") for key in annotations.keys()):
-            if "karpenter.sh/do-not-evict" in annotations:
-                return True
+    def _is_marked_for_deletion(self, node: client.V1Node) -> Tuple[bool, timedelta]:
+        """
+        Check if node is marked for deletion by any autoscaler/system.
 
-        # Check taints
+        Returns:
+            Tuple of (is_marked: bool, marking_age: timedelta or None)
+        """
+        annotations = node.metadata.annotations or {}
+        labels = node.metadata.labels or {}
+
+        # Check for protection annotations (always respected, no timeout)
+        for protection_key, protection_value in self.protection_annotations.items():
+            node_annotation_value = annotations.get(protection_key)
+            if node_annotation_value == protection_value:
+                self.logger.debug(
+                    f"Node has protection annotation: {protection_key}={protection_value}"
+                )
+                return True, None  # No timeout for protection annotations
+
+        # Check for protection labels (always respected, no timeout)
+        for protection_key, protection_value in self.protection_labels.items():
+            node_label_value = labels.get(protection_key)
+            if node_label_value == protection_value:
+                self.logger.debug(f"Node has protection label: {protection_key}={protection_value}")
+                return True, None  # No timeout for protection labels
+
+        # Check taints for deletion markers
         taints = node.spec.taints or []
         for taint in taints:
-            if "karpenter.sh" in taint.key and taint.effect == "NoSchedule":
-                return True
+            if taint.key in self.deletion_taints and taint.effect == "NoSchedule":
+                self.logger.debug(f"Found deletion taint: {taint.key}")
 
+                # Use taint timestamp if available
+                if taint.time_added:
+                    taint_age = datetime.now(timezone.utc) - taint.time_added
+                    return True, taint_age
+                else:
+                    # No timestamp available, assume it's been there for a while
+                    return True, self.deletion_timeout + timedelta(minutes=1)
+
+        return False, None
+
+    def _has_unschedulable_taint(self, node: client.V1Node) -> bool:
+        """Check if node has the unschedulable taint (cordoned)."""
+        taints = node.spec.taints or []
+        for taint in taints:
+            if taint.key == "node.kubernetes.io/unschedulable" and taint.effect == "NoSchedule":
+                return True
         return False
 
     def _is_node_unreachable(self, node: client.V1Node) -> bool:
@@ -104,14 +172,6 @@ class NodeAnalyzer:
         conditions = node.status.conditions or []
         for condition in conditions:
             if condition.type == "Ready" and condition.status == "Unknown":
-                return True
-        return False
-
-    def _is_node_unschedulable(self, node: client.V1Node) -> bool:
-        """Check if node has unschedulable taint (cordoned)."""
-        taints = node.spec.taints or []
-        for taint in taints:
-            if taint.key == "node.kubernetes.io/unschedulable" and taint.effect == "NoSchedule":
                 return True
         return False
 

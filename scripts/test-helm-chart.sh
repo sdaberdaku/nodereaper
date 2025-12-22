@@ -19,6 +19,10 @@ test_with_selector() {
 
     echo "🔍 Testing with selector: $selector"
 
+    # Parse selector into key=value format for map
+    local key=$(echo "$selector" | cut -d'=' -f1)
+    local value=$(echo "$selector" | cut -d'=' -f2-)
+
     # Update Helm chart with new selector
     helm upgrade nodereaper helm/ -n nodereaper --create-namespace \
         --set image.repository="$IMAGE_REPO" \
@@ -27,7 +31,7 @@ test_with_selector() {
         --set config.dryRun=true \
         --set config.logLevel=INFO \
         --set config.nodeMinAge=1s \
-        --set config.nodeLabelSelector="$selector"
+        --set "config.nodeLabelSelector.$key=$value"
 
     # Create and wait for job
     kubectl create job --from=cronjob/nodereaper "$job_name" -n nodereaper
@@ -75,7 +79,16 @@ main() {
         exit 1
     fi
 
-    echo "📋 Using cluster: $(kubectl config current-context)"
+    # Check if current context matches expected cluster name
+    current_context=$(kubectl config current-context 2>/dev/null || echo "")
+    expected_context="kind-${CLUSTER_NAME}"
+    if [[ "$current_context" != "$expected_context" ]]; then
+        echo "❌ Wrong cluster context. Expected: $expected_context, Current: $current_context"
+        echo "💡 Switch context with: kubectl config use-context $expected_context"
+        exit 1
+    fi
+
+    echo "📋 Using cluster: $current_context"
     echo "📋 Using image: $IMAGE_REPO:$IMAGE_TAG"
     echo ""
 
@@ -98,7 +111,7 @@ main() {
         --set config.dryRun=true \
         --set config.logLevel=INFO \
         --set config.nodeMinAge=1s \
-        --set config.nodeLabelSelector="cleanup-enabled=true"
+        --set "config.nodeLabelSelector.cleanup-enabled=true"
 
     echo "✅ Helm chart installed"
     echo ""

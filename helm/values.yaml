@@ -16,6 +16,53 @@ config:
   # Minimum age before a node can be deleted (e.g., 10m, 1h, 30s)
   nodeMinAge: "10m"
 
+  # Enable finalizer cleanup for stuck nodes
+  enableFinalizerCleanup: true
+
+  # Timeout before removing stuck finalizers (e.g., 5m, 10m, 1h)
+  finalizerTimeout: "5m"
+
+  # Timeout before taking over nodes marked for deletion (e.g., 15m, 30m, 1h)
+  # Nodes marked for deletion will be protected for this duration, after which
+  # NodeReaper will take over and delete them if they meet deletion criteria
+  deletionTimeout: "15m"
+
+  # Taints that indicate a node is marked for deletion (list of exact taint keys)
+  # NodeReaper will respect these taints for the deletionTimeout period
+  # Default includes common autoscaler deletion taints and unschedulable nodes
+  deletionTaints:
+    - karpenter.sh/disrupted
+    - node.kubernetes.io/unreachable
+    - node.kubernetes.io/unschedulable
+
+  # Annotations that provide permanent protection from deletion (map of key-value pairs)
+  # Nodes with these exact annotation key-value pairs will never be deleted by NodeReaper
+  protectionAnnotations:
+    karpenter.sh/do-not-evict: "true"
+    cluster-autoscaler.kubernetes.io/scale-down-disabled: "true"
+    nodereaper.io/do-not-delete: "true"
+
+  # Labels that provide permanent protection from deletion (map of key-value pairs)
+  # Nodes with these exact label key-value pairs will never be deleted by NodeReaper
+  protectionLabels:
+    karpenter.sh/do-not-evict: "true"
+    cluster-autoscaler.kubernetes.io/scale-down-disabled: "true"
+    nodereaper.io/do-not-delete: "true"
+
+  # Finalizer whitelist - only remove these exact finalizers (list)
+  # If set, only finalizers with these exact names will be removed
+  # Default includes common safe finalizers that are typically safe to remove
+  finalizerWhitelist:
+    - karpenter.sh/termination
+    - node.kubernetes.io/exclude-from-external-load-balancers
+
+  # Finalizer blacklist - never remove these exact finalizers (list)
+  # If set, finalizers with these exact names will never be removed
+  # Example:
+  #   - "example.com/critical-finalizer"
+  #   - "custom.io/important-finalizer"
+  finalizerBlacklist: []
+
   # Enable dry-run mode (only log actions, don't actually delete nodes)
   dryRun: false
 
@@ -26,12 +73,12 @@ config:
   clusterName: ""
 
   # Node label selector to filter which nodes to consider for deletion
-  # Format: "key1=value1,key2=value2" or empty string for all nodes
+  # Format: map of key-value pairs
   # Examples:
-  #   "cleanup-enabled=true" (only nodes with cleanup enabled)
-  #   "instance-type=m5.large" (only m5.large instances)
-  #   "zone=us-west-2a,instance-type=m5.large" (multiple labels)
-  nodeLabelSelector: ""
+  #   cleanup-enabled: "true"
+  #   instance-type: "m5.large"
+  #   zone: "us-west-2a"
+  nodeLabelSelector: {}
 
 # CronJob configuration
 cronjob:
@@ -103,11 +150,10 @@ securityContext:
 # Resource limits and requests
 resources:
   limits:
-    cpu: 200m
     memory: 128Mi
   requests:
     cpu: 100m
-    memory: 64Mi
+    memory: 128Mi
 
 # Node selector for pod assignment
 nodeSelector: {}

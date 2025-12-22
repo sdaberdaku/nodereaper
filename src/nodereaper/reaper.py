@@ -23,8 +23,14 @@ class NodeReaper:
         self.logger = self._setup_logging()
 
         # Initialize components
-        self.k8s_client = KubernetesClient()
-        self.node_analyzer = NodeAnalyzer(self.config.min_age)
+        self.k8s_client = KubernetesClient(self.config)
+        self.node_analyzer = NodeAnalyzer(
+            self.config.min_age,
+            self.config.deletion_timeout,
+            self.config.deletion_taints,
+            self.config.protection_annotations,
+            self.config.protection_labels,
+        )
         self.notifier = NotificationManager(self.config.slack_webhook_url)
 
     def _setup_logging(self) -> logging.Logger:
