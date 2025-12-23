@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import requests
 
-from src.nodereaper.notifier import NotificationManager, SlackNotifier
+from nodereaper.notifier import NotificationManager, SlackNotifier
 
 
 class TestSlackNotifier(unittest.TestCase):
@@ -144,7 +144,7 @@ class TestNotificationManager(unittest.TestCase):
         """Set up test environment."""
         self.manager = NotificationManager("https://hooks.slack.com/test")
 
-    @patch("src.nodereaper.notifier.SlackNotifier.send_notification")
+    @patch("nodereaper.notifier.SlackNotifier.send_notification")
     def test_notify_node_deletion(self, mock_slack_send):
         """Test node deletion notification."""
         mock_slack_send.return_value = True

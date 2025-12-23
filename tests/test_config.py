@@ -5,7 +5,7 @@ import unittest
 from datetime import timedelta
 from unittest.mock import patch
 
-from src.nodereaper.config import Config
+from nodereaper.config import Config
 
 
 class TestConfig(unittest.TestCase):
@@ -23,8 +23,7 @@ class TestConfig(unittest.TestCase):
             "PROTECTION_ANNOTATIONS",
             "PROTECTION_LABELS",
             "ENABLE_FINALIZER_CLEANUP",
-            "FINALIZER_WHITELIST",
-            "FINALIZER_BLACKLIST",
+            "CLEANUP_FINALIZERS",
             "SLACK_WEBHOOK_URL",
             "LOG_LEVEL",
             "NODE_LABEL_SELECTOR",
@@ -46,11 +45,10 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(config.protection_annotations, {})
         self.assertEqual(config.protection_labels, {})
         self.assertTrue(config.enable_finalizer_cleanup)
-        self.assertEqual(config.finalizer_whitelist, [])
-        self.assertEqual(config.finalizer_blacklist, [])
+        self.assertEqual(config.cleanup_finalizers, [])
         self.assertIsNone(config.slack_webhook_url)
         self.assertEqual(config.log_level, "INFO")
-        self.assertEqual(config.node_label_selector, {})
+        self.assertEqual(config.node_label_selector, "")
         self.assertEqual(config.cluster_name, "unknown")
         self.assertFalse(config.slack_enabled)
 
@@ -67,8 +65,7 @@ class TestConfig(unittest.TestCase):
                 "PROTECTION_ANNOTATIONS": "karpenter.sh/do-not-evict=true,nodereaper.io/do-not-delete=true",
                 "PROTECTION_LABELS": "karpenter.sh/do-not-evict=true,nodereaper.io/do-not-delete=true",
                 "ENABLE_FINALIZER_CLEANUP": "false",
-                "FINALIZER_WHITELIST": "karpenter.sh/termination,node.kubernetes.io/exclude-from-external-load-balancers",
-                "FINALIZER_BLACKLIST": "critical.example.com/finalizer,important.custom.io/finalizer",
+                "CLEANUP_FINALIZERS": "karpenter.sh/termination,node.kubernetes.io/exclude-from-external-load-balancers",
                 "SLACK_WEBHOOK_URL": "https://hooks.slack.com/test",
                 "LOG_LEVEL": "DEBUG",
                 "NODE_LABEL_SELECTOR": "cleanup-enabled=true",
@@ -94,19 +91,15 @@ class TestConfig(unittest.TestCase):
             )
             self.assertFalse(config.enable_finalizer_cleanup)
             self.assertEqual(
-                config.finalizer_whitelist,
+                config.cleanup_finalizers,
                 [
                     "karpenter.sh/termination",
                     "node.kubernetes.io/exclude-from-external-load-balancers",
                 ],
             )
-            self.assertEqual(
-                config.finalizer_blacklist,
-                ["critical.example.com/finalizer", "important.custom.io/finalizer"],
-            )
             self.assertEqual(config.slack_webhook_url, "https://hooks.slack.com/test")
             self.assertEqual(config.log_level, "DEBUG")
-            self.assertEqual(config.node_label_selector, {"cleanup-enabled": "true"})
+            self.assertEqual(config.node_label_selector, "cleanup-enabled=true")
             self.assertEqual(config.cluster_name, "test-cluster")
             self.assertTrue(config.slack_enabled)
 
@@ -150,15 +143,15 @@ class TestConfig(unittest.TestCase):
     def test_label_selector_parsing(self):
         """Test node label selector parsing."""
         test_cases = [
-            ("", {}),
-            ("key=value", {"key": "value"}),
-            ("key1=value1,key2=value2", {"key1": "value1", "key2": "value2"}),
-            ("cleanup-enabled=true", {"cleanup-enabled": "true"}),
+            ("", ""),
+            ("key=value", "key=value"),
+            ("key1=value1,key2=value2", "key1=value1,key2=value2"),
+            ("cleanup-enabled=true", "cleanup-enabled=true"),
             (
                 "instance-type=m5.large,zone=us-west-2a",
-                {"instance-type": "m5.large", "zone": "us-west-2a"},
+                "instance-type=m5.large,zone=us-west-2a",
             ),
-            ("  key = value  ", {"key": "value"}),  # Test whitespace handling
+            ("  key=value  ", "key=value"),  # Whitespace is stripped in config
         ]
 
         for selector_str, expected in test_cases:
@@ -195,7 +188,7 @@ class TestConfig(unittest.TestCase):
         """Test label selector from environment variable."""
         with patch.dict(os.environ, {"NODE_LABEL_SELECTOR": "cleanup-enabled=true"}):
             config = Config()
-            self.assertEqual(config.node_label_selector, {"cleanup-enabled": "true"})
+            self.assertEqual(config.node_label_selector, "cleanup-enabled=true")
 
     def test_protection_labels_parsing(self):
         """Test protection labels parsing."""
@@ -234,10 +227,10 @@ class TestConfig(unittest.TestCase):
         ]
 
         for finalizer_str, expected in test_cases:
-            with patch.dict(os.environ, {"FINALIZER_WHITELIST": finalizer_str}):
+            with patch.dict(os.environ, {"CLEANUP_FINALIZERS": finalizer_str}):
                 config = Config()
                 self.assertEqual(
-                    config.finalizer_whitelist,
+                    config.cleanup_finalizers,
                     expected,
                     f"Failed for finalizer list: '{finalizer_str}'",
                 )

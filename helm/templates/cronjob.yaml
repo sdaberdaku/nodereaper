@@ -45,6 +45,12 @@ spec:
             env:
             - name: ENABLE_FINALIZER_CLEANUP
               value: {{ .Values.config.enableFinalizerCleanup | quote }}
+            - name: FINALIZER_TIMEOUT
+              value: {{ .Values.config.finalizerTimeout | quote }}
+            {{- if .Values.config.cleanupFinalizers }}
+            - name: CLEANUP_FINALIZERS
+              value: {{ join "," .Values.config.cleanupFinalizers | quote }}
+            {{- end }}
             {{- if .Values.config.clusterName }}
             - name: CLUSTER_NAME
               value: {{ .Values.config.clusterName | quote }}
@@ -57,16 +63,6 @@ spec:
               value: {{ .Values.config.deletionTimeout | quote }}
             - name: DRY_RUN
               value: {{ .Values.config.dryRun | quote }}
-            {{- if .Values.config.finalizerBlacklist }}
-            - name: FINALIZER_BLACKLIST
-              value: {{ join "," .Values.config.finalizerBlacklist | quote }}
-            {{- end }}
-            - name: FINALIZER_TIMEOUT
-              value: {{ .Values.config.finalizerTimeout | quote }}
-            {{- if .Values.config.finalizerWhitelist }}
-            - name: FINALIZER_WHITELIST
-              value: {{ join "," .Values.config.finalizerWhitelist | quote }}
-            {{- end }}
             - name: LOG_LEVEL
               value: {{ .Values.config.logLevel | quote }}
             - name: NODE_MIN_AGE

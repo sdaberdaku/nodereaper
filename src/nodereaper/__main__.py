@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 Copyright 2025 Sebastian Daberdaku
 """
 
-from .reaper import NodeReaper
+from nodereaper.reaper import NodeReaper
 
 
 def main() -> None:

@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, patch
 
 from kubernetes.client.rest import ApiException
 
-from src.nodereaper.config import Config
-from src.nodereaper.kubernetes_client import KubernetesClient
+from nodereaper.config import Config
+from nodereaper.kubernetes_client import KubernetesClient
 
 
 class TestKubernetesClient(unittest.TestCase):
@@ -20,13 +20,20 @@ class TestKubernetesClient(unittest.TestCase):
                 self.client = KubernetesClient()
                 self.client.v1 = MagicMock()
 
+                # Add default mock config for tests that don't set up their own
+                mock_config = MagicMock()
+                mock_config.enable_finalizer_cleanup = False  # Disable by default for simple tests
+                mock_config.finalizer_timeout = timedelta(minutes=5)
+                mock_config.cleanup_finalizers = []
+                self.client.config = mock_config
+
     def test_list_nodes_with_label_selector(self):
         """Test node listing with label selector."""
         mock_nodes = MagicMock()
         mock_nodes.items = ["node1", "node2"]
         self.client.v1.list_node.return_value = mock_nodes
 
-        label_selector = {"cleanup-enabled": "true"}
+        label_selector = "cleanup-enabled=true"
         result = self.client.list_nodes(label_selector)
 
         self.assertEqual(result, ["node1", "node2"])
@@ -38,7 +45,7 @@ class TestKubernetesClient(unittest.TestCase):
         mock_nodes.items = ["node1", "node2"]
         self.client.v1.list_node.return_value = mock_nodes
 
-        result = self.client.list_nodes()
+        result = self.client.list_nodes("")
 
         self.assertEqual(result, ["node1", "node2"])
         self.client.v1.list_node.assert_called_once_with(label_selector=None)
@@ -49,15 +56,13 @@ class TestKubernetesClient(unittest.TestCase):
         mock_nodes.items = ["node1"]
         self.client.v1.list_node.return_value = mock_nodes
 
-        label_selector = {"instance-type": "m5.large", "zone": "us-west-2a"}
+        label_selector = "instance-type=m5.large,zone=us-west-2a"
         result = self.client.list_nodes(label_selector)
 
         self.assertEqual(result, ["node1"])
-        # Should be called with comma-separated labels (order may vary)
-        call_args = self.client.v1.list_node.call_args[1]["label_selector"]
-        self.assertIn("instance-type=m5.large", call_args)
-        self.assertIn("zone=us-west-2a", call_args)
-        self.assertIn(",", call_args)
+        self.client.v1.list_node.assert_called_once_with(
+            label_selector="instance-type=m5.large,zone=us-west-2a"
+        )
 
     def test_list_nodes_failure(self):
         """Test failed node listing."""
@@ -88,6 +93,10 @@ class TestKubernetesClient(unittest.TestCase):
 
     def test_delete_node_success(self):
         """Test successful node deletion."""
+        # Mock the node read for finalizer cleanup check
+        mock_node = MagicMock()
+        mock_node.metadata.deletion_timestamp = None  # Not terminating
+        self.client.v1.read_node.return_value = mock_node
         self.client.v1.delete_node.return_value = None
 
         result = self.client.delete_node("test-node")
@@ -97,6 +106,10 @@ class TestKubernetesClient(unittest.TestCase):
 
     def test_delete_node_failure(self):
         """Test failed node deletion."""
+        # Mock the node read for finalizer cleanup check
+        mock_node = MagicMock()
+        mock_node.metadata.deletion_timestamp = None  # Not terminating
+        self.client.v1.read_node.return_value = mock_node
         self.client.v1.delete_node.side_effect = ApiException("API Error")
 
         result = self.client.delete_node("test-node")
@@ -119,35 +132,33 @@ class TestKubernetesClient(unittest.TestCase):
 
         self.assertFalse(result)
 
-    def test_finalizer_whitelist_exact_match(self):
-        """Test finalizer whitelist with exact matching."""
-        # Create mock config with whitelist
+    def test_cleanup_finalizers_exact_match(self):
+        """Test cleanup finalizers with exact matching."""
+        # Create mock config with cleanup finalizers
         mock_config = MagicMock()
         mock_config.enable_finalizer_cleanup = True
         mock_config.finalizer_timeout = timedelta(minutes=5)
-        mock_config.finalizer_whitelist = [
+        mock_config.cleanup_finalizers = [
             "karpenter.sh/termination",
             "node.kubernetes.io/exclude-from-external-load-balancers",
         ]
-        mock_config.finalizer_blacklist = []
 
         self.client.config = mock_config
 
-        # Create mock node with finalizers
+        # Create mock node with finalizers that has been terminating for longer than timeout
         mock_node = MagicMock()
+        mock_node.metadata.name = "test-node"
+        mock_node.metadata.deletion_timestamp = datetime.now(timezone.utc) - timedelta(minutes=10)
         mock_node.metadata.finalizers = [
             "karpenter.sh/termination",  # Should be removed (exact match)
             "karpenter.sh/other",  # Should NOT be removed (not exact match)
             "node.kubernetes.io/exclude-from-external-load-balancers",  # Should be removed (exact match)
-            "custom.io/finalizer",  # Should NOT be removed (not in whitelist)
+            "custom.io/finalizer",  # Should NOT be removed (not in cleanup list)
         ]
 
-        # Test _is_safe_to_remove_finalizers
-        result = self.client._is_safe_to_remove_finalizers(mock_node)
-        self.assertTrue(result)  # Should return True because some finalizers match whitelist
-
-        # Test _remove_stuck_finalizers
-        self.client._remove_stuck_finalizers(mock_node)
+        # Test _cleanup_stuck_finalizers
+        result = self.client._cleanup_stuck_finalizers(mock_node)
+        self.assertTrue(result)  # Should return True because finalizers were cleaned up
 
         # Verify patch was called with correct finalizers to keep
         expected_finalizers_to_keep = ["karpenter.sh/other", "custom.io/finalizer"]
@@ -155,157 +166,92 @@ class TestKubernetesClient(unittest.TestCase):
         call_args = self.client.v1.patch_node.call_args[1]["body"]
         self.assertEqual(call_args["metadata"]["finalizers"], expected_finalizers_to_keep)
 
-    def test_finalizer_blacklist_exact_match(self):
-        """Test finalizer blacklist with exact matching."""
-        # Create mock config with blacklist
+    def test_no_cleanup_finalizers_configured(self):
+        """Test finalizer cleanup when no cleanup finalizers are configured."""
+        # Create mock config with no cleanup finalizers
         mock_config = MagicMock()
         mock_config.enable_finalizer_cleanup = True
         mock_config.finalizer_timeout = timedelta(minutes=5)
-        mock_config.finalizer_whitelist = []
-        mock_config.finalizer_blacklist = [
-            "critical.example.com/finalizer",
-            "important.custom.io/finalizer",
-        ]
+        mock_config.cleanup_finalizers = []
 
         self.client.config = mock_config
 
-        # Create mock node with finalizers
+        # Create mock node with finalizers that has been terminating for longer than timeout
         mock_node = MagicMock()
-        mock_node.metadata.finalizers = [
-            "critical.example.com/finalizer",  # Should NOT be removed (exact match in blacklist)
-            "critical.example.com/other",  # Should be removed (not exact match)
-            "important.custom.io/finalizer",  # Should NOT be removed (exact match in blacklist)
-            "safe.io/finalizer",  # Should be removed (not in blacklist)
-        ]
-
-        # Test _is_safe_to_remove_finalizers
-        result = self.client._is_safe_to_remove_finalizers(mock_node)
-        self.assertFalse(result)  # Should return False because blacklisted finalizers are present
-
-    def test_finalizer_blacklist_safe_to_remove(self):
-        """Test finalizer blacklist when no blacklisted finalizers are present."""
-        # Create mock config with blacklist
-        mock_config = MagicMock()
-        mock_config.enable_finalizer_cleanup = True
-        mock_config.finalizer_timeout = timedelta(minutes=5)
-        mock_config.finalizer_whitelist = []
-        mock_config.finalizer_blacklist = ["critical.example.com/finalizer"]
-
-        self.client.config = mock_config
-
-        # Create mock node with finalizers (none in blacklist)
-        mock_node = MagicMock()
-        mock_node.metadata.finalizers = ["safe.io/finalizer", "another.io/finalizer"]
-
-        # Test _is_safe_to_remove_finalizers
-        result = self.client._is_safe_to_remove_finalizers(mock_node)
-        self.assertTrue(result)  # Should return True because no blacklisted finalizers
-
-        # Test _remove_stuck_finalizers
-        self.client._remove_stuck_finalizers(mock_node)
-
-        # Verify all finalizers are removed (none in blacklist)
-        expected_finalizers_to_keep = []
-        self.client.v1.patch_node.assert_called_once()
-        call_args = self.client.v1.patch_node.call_args[1]["body"]
-        self.assertEqual(call_args["metadata"]["finalizers"], expected_finalizers_to_keep)
-
-    def test_finalizer_no_whitelist_or_blacklist(self):
-        """Test finalizer cleanup when no whitelist or blacklist is configured."""
-        # Create mock config with no whitelist/blacklist
-        mock_config = MagicMock()
-        mock_config.enable_finalizer_cleanup = True
-        mock_config.finalizer_timeout = timedelta(minutes=5)
-        mock_config.finalizer_whitelist = []
-        mock_config.finalizer_blacklist = []
-
-        self.client.config = mock_config
-
-        # Create mock node with finalizers
-        mock_node = MagicMock()
+        mock_node.metadata.name = "test-node"
+        mock_node.metadata.deletion_timestamp = datetime.now(timezone.utc) - timedelta(minutes=10)
         mock_node.metadata.finalizers = ["some.io/finalizer"]
 
-        # Test _is_safe_to_remove_finalizers
-        result = self.client._is_safe_to_remove_finalizers(mock_node)
-        self.assertFalse(result)  # Should return False for safety when no config
+        # Test _cleanup_stuck_finalizers
+        result = self.client._cleanup_stuck_finalizers(mock_node)
+        self.assertFalse(
+            result
+        )  # Should return False for safety when no cleanup finalizers configured
 
-    def test_finalizer_whitelist_no_matches(self):
-        """Test finalizer whitelist when no finalizers match."""
-        # Create mock config with whitelist
-        mock_config = MagicMock()
-        mock_config.enable_finalizer_cleanup = True
-        mock_config.finalizer_timeout = timedelta(minutes=5)
-        mock_config.finalizer_whitelist = ["karpenter.sh/termination"]
-        mock_config.finalizer_blacklist = []
-
-        self.client.config = mock_config
-
-        # Create mock node with finalizers that don't match whitelist
-        mock_node = MagicMock()
-        mock_node.metadata.finalizers = [
-            "karpenter.sh/other",  # Similar but not exact match
-            "custom.io/finalizer",
-        ]
-
-        # Test _is_safe_to_remove_finalizers
-        result = self.client._is_safe_to_remove_finalizers(mock_node)
-        self.assertFalse(result)  # Should return False because no exact matches
-
-    def test_should_cleanup_finalizers_timeout(self):
-        """Test _should_cleanup_finalizers with timeout logic."""
+    def test_cleanup_finalizers_timeout_not_exceeded(self):
+        """Test _cleanup_stuck_finalizers when timeout not exceeded."""
         # Create mock config
         mock_config = MagicMock()
         mock_config.enable_finalizer_cleanup = True
         mock_config.finalizer_timeout = timedelta(minutes=5)
-        mock_config.finalizer_whitelist = ["safe.io/finalizer"]
-        mock_config.finalizer_blacklist = []
-
-        self.client.config = mock_config
-
-        # Create mock node that has been terminating for longer than timeout
-        mock_node = MagicMock()
-        mock_node.metadata.deletion_timestamp = datetime.now(timezone.utc) - timedelta(minutes=10)
-        mock_node.metadata.finalizers = ["safe.io/finalizer"]
-
-        # Test _should_cleanup_finalizers
-        result = self.client._should_cleanup_finalizers(mock_node)
-        self.assertTrue(result)  # Should return True because timeout exceeded and safe to remove
-
-    def test_should_cleanup_finalizers_no_timeout(self):
-        """Test _should_cleanup_finalizers when timeout not exceeded."""
-        # Create mock config
-        mock_config = MagicMock()
-        mock_config.enable_finalizer_cleanup = True
-        mock_config.finalizer_timeout = timedelta(minutes=5)
-        mock_config.finalizer_whitelist = ["safe.io/finalizer"]
-        mock_config.finalizer_blacklist = []
+        mock_config.cleanup_finalizers = ["safe.io/finalizer"]
 
         self.client.config = mock_config
 
         # Create mock node that has been terminating for less than timeout
         mock_node = MagicMock()
+        mock_node.metadata.name = "test-node"
         mock_node.metadata.deletion_timestamp = datetime.now(timezone.utc) - timedelta(minutes=2)
         mock_node.metadata.finalizers = ["safe.io/finalizer"]
 
-        # Test _should_cleanup_finalizers
-        result = self.client._should_cleanup_finalizers(mock_node)
+        # Test _cleanup_stuck_finalizers
+        result = self.client._cleanup_stuck_finalizers(mock_node)
         self.assertFalse(result)  # Should return False because timeout not exceeded
 
-    def test_should_cleanup_finalizers_disabled(self):
-        """Test _should_cleanup_finalizers when cleanup is disabled."""
+    def test_cleanup_finalizers_timeout_exceeded(self):
+        """Test _cleanup_stuck_finalizers when timeout is exceeded."""
+        # Create mock config
+        mock_config = MagicMock()
+        mock_config.enable_finalizer_cleanup = True
+        mock_config.finalizer_timeout = timedelta(minutes=5)
+        mock_config.cleanup_finalizers = ["safe.io/finalizer"]
+
+        self.client.config = mock_config
+
+        # Create mock node that has been terminating for longer than timeout
+        mock_node = MagicMock()
+        mock_node.metadata.name = "test-node"
+        mock_node.metadata.deletion_timestamp = datetime.now(timezone.utc) - timedelta(minutes=10)
+        mock_node.metadata.finalizers = ["safe.io/finalizer", "other.io/finalizer"]
+
+        # Test _cleanup_stuck_finalizers
+        result = self.client._cleanup_stuck_finalizers(mock_node)
+        self.assertTrue(
+            result
+        )  # Should return True because timeout exceeded and finalizers were cleaned
+
+        # Verify patch was called with correct finalizers to keep
+        expected_finalizers_to_keep = ["other.io/finalizer"]
+        self.client.v1.patch_node.assert_called_once()
+        call_args = self.client.v1.patch_node.call_args[1]["body"]
+        self.assertEqual(call_args["metadata"]["finalizers"], expected_finalizers_to_keep)
+
+    def test_cleanup_finalizers_disabled(self):
+        """Test _cleanup_stuck_finalizers when cleanup is disabled."""
         # Create mock config with cleanup disabled
         mock_config = MagicMock()
         mock_config.enable_finalizer_cleanup = False
 
         self.client.config = mock_config
 
-        # Create mock node
+        # Create mock node that has been terminating for longer than timeout
         mock_node = MagicMock()
+        mock_node.metadata.name = "test-node"
         mock_node.metadata.deletion_timestamp = datetime.now(timezone.utc) - timedelta(minutes=10)
         mock_node.metadata.finalizers = ["some.io/finalizer"]
 
-        # Test _should_cleanup_finalizers
-        result = self.client._should_cleanup_finalizers(mock_node)
+        # Test _cleanup_stuck_finalizers
+        result = self.client._cleanup_stuck_finalizers(mock_node)
         self.assertFalse(result)  # Should return False because cleanup is disabled
 
 

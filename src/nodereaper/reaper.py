@@ -8,10 +8,10 @@ Copyright 2025 Sebastian Daberdaku
 import logging
 import sys
 
-from .config import Config
-from .kubernetes_client import KubernetesClient
-from .node_analyzer import NodeAnalyzer
-from .notifier import NotificationManager
+from nodereaper.config import Config
+from nodereaper.kubernetes_client import KubernetesClient
+from nodereaper.node_analyzer import NodeAnalyzer
+from nodereaper.notifier import NotificationManager
 
 
 class NodeReaper:
@@ -61,10 +61,7 @@ class NodeReaper:
         self.logger.info("Starting NodeReaper run...")
 
         if self.config.node_label_selector:
-            selector_str = ",".join(
-                [f"{k}={v}" for k, v in self.config.node_label_selector.items()]
-            )
-            self.logger.info(f"Using node label selector: {selector_str}")
+            self.logger.info(f"Using node label selector: {self.config.node_label_selector}")
         else:
             self.logger.info("No node label selector specified, processing all nodes")
 

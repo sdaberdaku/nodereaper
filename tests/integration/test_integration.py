@@ -4,16 +4,15 @@ import os
 import time
 import unittest
 from datetime import datetime, timedelta, timezone
-from typing import List
 
 import pytest
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
 
-from src.nodereaper.config import Config
-from src.nodereaper.kubernetes_client import KubernetesClient
-from src.nodereaper.node_analyzer import NodeAnalyzer
-from src.nodereaper.reaper import NodeReaper
+from nodereaper.config import Config
+from nodereaper.kubernetes_client import KubernetesClient
+from nodereaper.node_analyzer import NodeAnalyzer
+from nodereaper.reaper import NodeReaper
 
 
 @pytest.mark.integration
@@ -96,7 +95,7 @@ class TestNodeReaperIntegration(unittest.TestCase):
     def test_list_nodes_with_label_selector(self):
         """Test node listing with label selectors."""
         # Test cleanup-enabled selector
-        cleanup_nodes = self.k8s_client.list_nodes({"cleanup-enabled": "true"})
+        cleanup_nodes = self.k8s_client.list_nodes("cleanup-enabled=true")
 
         # Should have nodes with cleanup enabled in our test cluster
         self.assertGreaterEqual(len(cleanup_nodes), 0)
@@ -110,7 +109,7 @@ class TestNodeReaperIntegration(unittest.TestCase):
     def test_list_nodes_with_custom_labels(self):
         """Test node listing with custom labels."""
         # Test custom label selector (if nodes have them)
-        nodes_with_cleanup = self.k8s_client.list_nodes({"cleanup-enabled": "true"})
+        nodes_with_cleanup = self.k8s_client.list_nodes("cleanup-enabled=true")
 
         # Verify all returned nodes have the expected label
         for node in nodes_with_cleanup:
@@ -627,7 +626,7 @@ class TestNodeReaperIntegrationPytest:
 
     def test_worker_node_labels(self):
         """Test that worker nodes have expected labels."""
-        cleanup_nodes = self.k8s_client.list_nodes({"cleanup-enabled": "true"})
+        cleanup_nodes = self.k8s_client.list_nodes("cleanup-enabled=true")
 
         for node in cleanup_nodes:
             labels = node.metadata.labels or {}

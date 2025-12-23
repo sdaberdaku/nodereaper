@@ -3,8 +3,8 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from src.nodereaper.config import Config
-from src.nodereaper.reaper import NodeReaper
+from nodereaper.config import Config
+from nodereaper.reaper import NodeReaper
 
 
 class TestNodeReaper(unittest.TestCase):
@@ -18,9 +18,9 @@ class TestNodeReaper(unittest.TestCase):
         self.config.log_level = "DEBUG"
 
         # Mock all dependencies
-        with patch("src.nodereaper.reaper.KubernetesClient") as mock_k8s:
-            with patch("src.nodereaper.reaper.NodeAnalyzer") as mock_analyzer:
-                with patch("src.nodereaper.reaper.NotificationManager") as mock_notifier:
+        with patch("nodereaper.reaper.KubernetesClient") as mock_k8s:
+            with patch("nodereaper.reaper.NodeAnalyzer") as mock_analyzer:
+                with patch("nodereaper.reaper.NotificationManager") as mock_notifier:
                     self.reaper = NodeReaper(self.config)
 
                     # Set up mocks

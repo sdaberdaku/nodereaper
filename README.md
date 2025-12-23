@@ -44,8 +44,7 @@ helm install nodereaper oci://ghcr.io/sdaberdaku/charts/nodereaper \
 | `config.protectionLabels` | Map of label key-value pairs providing protection | See below |
 | `config.enableFinalizerCleanup` | Enable finalizer cleanup for stuck nodes | `true` |
 | `config.finalizerTimeout` | Timeout before removing stuck finalizers | `5m` |
-| `config.finalizerWhitelist` | List of exact finalizer names safe to remove | See below |
-| `config.finalizerBlacklist` | List of exact finalizer names never to remove | `[]` |
+| `config.cleanupFinalizers` | List of exact finalizer names safe to remove | See below |
 | `config.dryRun` | Enable dry-run mode (no actual deletions) | `false` |
 | `config.nodeLabelSelector` | Map of key-value pairs to filter nodes | `{}` |
 
@@ -57,21 +56,19 @@ NodeReaper uses the following protection and deletion markers:
 config:
   # Taint keys that indicate deletion
   deletionTaints:
-    - "karpenter.sh/disrupted"
-    - "node.kubernetes.io/unreachable"
-    - "node.kubernetes.io/unschedulable"
+    - karpenter.sh/disrupted
+    - node.kubernetes.io/unreachable
+    - node.kubernetes.io/unschedulable
 
   # Annotation key-value pairs that provide protection
   protectionAnnotations:
-    "karpenter.sh/do-not-evict": "true"
-    "cluster-autoscaler.kubernetes.io/scale-down-disabled": "true"
-    "nodereaper.io/do-not-delete": "true"
+    karpenter.sh/do-not-evict: "true"
+    cluster-autoscaler.kubernetes.io/scale-down-disabled: "true"
+    nodereaper.io/do-not-delete: "true"
 
   # Label key-value pairs that provide protection
   protectionLabels:
-    "karpenter.sh/do-not-evict": "true"
-    "cluster-autoscaler.kubernetes.io/scale-down-disabled": "true"
-    "nodereaper.io/do-not-delete": "true"
+    dedicated: karpenter
 ```
 
 ### Finalizer Management
@@ -84,20 +81,17 @@ config:
   # How long to wait before cleaning up stuck finalizers
   finalizerTimeout: "5m"
 
-  # Exact finalizer names safe to remove (whitelist approach)
-  finalizerWhitelist:
+  # Exact finalizer names safe to remove during cleanup
+  cleanupFinalizers:
     - "karpenter.sh/termination"
     - "node.kubernetes.io/exclude-from-external-load-balancers"
-
-  # Exact finalizer names never to remove (blacklist approach)
-  finalizerBlacklist: []
 ```
 
 **How it works:**
 - Nodes with **protection annotations or labels** are never deleted
 - Nodes with **deletion taints** are protected for `deletionTimeout` duration
 - After timeout expires, NodeReaper takes over if the node meets deletion criteria
-- Stuck finalizers are cleaned up based on whitelist/blacklist configuration
+- Only finalizers in the `cleanupFinalizers` list are removed during cleanup
 
 ### Advanced Configuration
 

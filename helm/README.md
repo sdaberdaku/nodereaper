@@ -25,8 +25,6 @@ A Kubernetes tool for automatically detecting and cleaning up empty nodes
 | image.tag | string | `""` |  |
 | imagePullSecrets | list | `[]` |  |
 | config.nodeMinAge | string | `"10m"` |  |
-| config.enableFinalizerCleanup | bool | `true` |  |
-| config.finalizerTimeout | string | `"5m"` |  |
 | config.deletionTimeout | string | `"15m"` |  |
 | config.deletionTaints[0] | string | `"karpenter.sh/disrupted"` |  |
 | config.deletionTaints[1] | string | `"node.kubernetes.io/unreachable"` |  |
@@ -34,12 +32,11 @@ A Kubernetes tool for automatically detecting and cleaning up empty nodes
 | config.protectionAnnotations."karpenter.sh/do-not-evict" | string | `"true"` |  |
 | config.protectionAnnotations."cluster-autoscaler.kubernetes.io/scale-down-disabled" | string | `"true"` |  |
 | config.protectionAnnotations."nodereaper.io/do-not-delete" | string | `"true"` |  |
-| config.protectionLabels."karpenter.sh/do-not-evict" | string | `"true"` |  |
-| config.protectionLabels."cluster-autoscaler.kubernetes.io/scale-down-disabled" | string | `"true"` |  |
-| config.protectionLabels."nodereaper.io/do-not-delete" | string | `"true"` |  |
-| config.finalizerWhitelist[0] | string | `"karpenter.sh/termination"` |  |
-| config.finalizerWhitelist[1] | string | `"node.kubernetes.io/exclude-from-external-load-balancers"` |  |
-| config.finalizerBlacklist | list | `[]` |  |
+| config.protectionLabels | object | `{}` |  |
+| config.enableFinalizerCleanup | bool | `true` |  |
+| config.finalizerTimeout | string | `"5m"` |  |
+| config.cleanupFinalizers[0] | string | `"karpenter.sh/termination"` |  |
+| config.cleanupFinalizers[1] | string | `"node.kubernetes.io/exclude-from-external-load-balancers"` |  |
 | config.dryRun | bool | `false` |  |
 | config.logLevel | string | `"INFO"` |  |
 | config.clusterName | string | `""` |  |

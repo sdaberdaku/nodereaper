@@ -9,9 +9,8 @@ Copyright 2025 Sebastian Daberdaku
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import List, Tuple
 
-from kubernetes import client
+from kubernetes import client as k8s
 
 
 class NodeAnalyzer:
@@ -33,7 +32,7 @@ class NodeAnalyzer:
         self.protection_labels = protection_labels or {}
         self.logger = logging.getLogger(__name__)
 
-    def should_delete_node(self, node: client.V1Node, pods: List[client.V1Pod]) -> Tuple[bool, str]:
+    def should_delete_node(self, node: k8s.V1Node, pods: list[k8s.V1Pod]) -> tuple[bool, str]:
         """
         Determine if a node should be deleted.
 
@@ -94,12 +93,12 @@ class NodeAnalyzer:
         self.logger.debug(f"Node {node_name} has workloads, keeping")
         return False, ""
 
-    def _is_node_old_enough(self, node: client.V1Node) -> bool:
+    def _is_node_old_enough(self, node: k8s.V1Node) -> bool:
         """Check if node is old enough to be deleted."""
         age = self._get_node_age(node)
         return age >= self.min_age
 
-    def _get_node_age(self, node: client.V1Node) -> timedelta:
+    def _get_node_age(self, node: k8s.V1Node) -> timedelta:
         """Get the age of a node."""
         creation_time: datetime = node.metadata.creation_timestamp
         return datetime.now(timezone.utc) - creation_time
@@ -117,7 +116,7 @@ class NodeAnalyzer:
         else:
             return f"{total_seconds // 86400}d"
 
-    def _is_marked_for_deletion(self, node: client.V1Node) -> Tuple[bool, timedelta]:
+    def _is_marked_for_deletion(self, node: k8s.V1Node) -> tuple[bool, timedelta]:
         """
         Check if node is marked for deletion by any autoscaler/system.
 
@@ -159,7 +158,7 @@ class NodeAnalyzer:
 
         return False, None
 
-    def _has_unschedulable_taint(self, node: client.V1Node) -> bool:
+    def _has_unschedulable_taint(self, node: k8s.V1Node) -> bool:
         """Check if node has the unschedulable taint (cordoned)."""
         taints = node.spec.taints or []
         for taint in taints:
@@ -167,7 +166,7 @@ class NodeAnalyzer:
                 return True
         return False
 
-    def _is_node_unreachable(self, node: client.V1Node) -> bool:
+    def _is_node_unreachable(self, node: k8s.V1Node) -> bool:
         """Check if node is in unreachable state."""
         conditions = node.status.conditions or []
         for condition in conditions:
@@ -175,7 +174,7 @@ class NodeAnalyzer:
                 return True
         return False
 
-    def _is_node_empty(self, pods: List[client.V1Pod]) -> bool:
+    def _is_node_empty(self, pods: list[k8s.V1Pod]) -> bool:
         """Check if node only has DaemonSet pods running."""
         non_daemonset_pods = 0
         for pod in pods:
@@ -185,12 +184,12 @@ class NodeAnalyzer:
 
         return non_daemonset_pods == 0
 
-    def _is_daemonset_pod(self, pod: client.V1Pod) -> bool:
+    def _is_daemonset_pod(self, pod: k8s.V1Pod) -> bool:
         """Check if pod is owned by a DaemonSet."""
         owner_references = pod.metadata.owner_references or []
         return any(owner.kind == "DaemonSet" for owner in owner_references)
 
-    def get_node_info(self, node: client.V1Node, cluster_name: str = "unknown") -> dict:
+    def get_node_info(self, node: k8s.V1Node, cluster_name: str = "unknown") -> dict:
         """Get node information for logging/notifications."""
         labels = node.metadata.labels or {}
         age = self._get_node_age(node)

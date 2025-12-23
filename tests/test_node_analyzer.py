@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from kubernetes import client
 
-from src.nodereaper.node_analyzer import NodeAnalyzer
+from nodereaper.node_analyzer import NodeAnalyzer
 
 
 class TestNodeAnalyzer(unittest.TestCase):

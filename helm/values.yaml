@@ -16,12 +16,6 @@ config:
   # Minimum age before a node can be deleted (e.g., 10m, 1h, 30s)
   nodeMinAge: "10m"
 
-  # Enable finalizer cleanup for stuck nodes
-  enableFinalizerCleanup: true
-
-  # Timeout before removing stuck finalizers (e.g., 5m, 10m, 1h)
-  finalizerTimeout: "5m"
-
   # Timeout before taking over nodes marked for deletion (e.g., 15m, 30m, 1h)
   # Nodes marked for deletion will be protected for this duration, after which
   # NodeReaper will take over and delete them if they meet deletion criteria
@@ -44,24 +38,20 @@ config:
 
   # Labels that provide permanent protection from deletion (map of key-value pairs)
   # Nodes with these exact label key-value pairs will never be deleted by NodeReaper
-  protectionLabels:
-    karpenter.sh/do-not-evict: "true"
-    cluster-autoscaler.kubernetes.io/scale-down-disabled: "true"
-    nodereaper.io/do-not-delete: "true"
+  protectionLabels: {}
 
-  # Finalizer whitelist - only remove these exact finalizers (list)
-  # If set, only finalizers with these exact names will be removed
+  # Enable finalizer cleanup for stuck nodes
+  enableFinalizerCleanup: true
+
+  # Timeout before removing stuck finalizers (e.g., 5m, 10m, 1h)
+  finalizerTimeout: "5m"
+
+  # Finalizers that are safe to remove when nodes are stuck terminating (list)
+  # Only finalizers with these exact names will be removed during cleanup
   # Default includes common safe finalizers that are typically safe to remove
-  finalizerWhitelist:
+  cleanupFinalizers:
     - karpenter.sh/termination
     - node.kubernetes.io/exclude-from-external-load-balancers
-
-  # Finalizer blacklist - never remove these exact finalizers (list)
-  # If set, finalizers with these exact names will never be removed
-  # Example:
-  #   - "example.com/critical-finalizer"
-  #   - "custom.io/important-finalizer"
-  finalizerBlacklist: []
 
   # Enable dry-run mode (only log actions, don't actually delete nodes)
   dryRun: false

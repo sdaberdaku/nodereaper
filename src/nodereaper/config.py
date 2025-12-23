@@ -8,7 +8,6 @@ Copyright 2025 Sebastian Daberdaku
 import os
 import re
 from datetime import timedelta
-from typing import Dict
 
 
 class Config:
@@ -26,11 +25,10 @@ class Config:
         )
         self.protection_labels = self._parse_protection_labels(os.getenv("PROTECTION_LABELS", ""))
         self.enable_finalizer_cleanup = self._get_bool_env("ENABLE_FINALIZER_CLEANUP", True)
-        self.finalizer_whitelist = self._parse_finalizer_list(os.getenv("FINALIZER_WHITELIST", ""))
-        self.finalizer_blacklist = self._parse_finalizer_list(os.getenv("FINALIZER_BLACKLIST", ""))
+        self.cleanup_finalizers = self._parse_finalizer_list(os.getenv("CLEANUP_FINALIZERS", ""))
         self.slack_webhook_url = os.getenv("SLACK_WEBHOOK_URL")
         self.log_level = os.getenv("LOG_LEVEL", "INFO").upper()
-        self.node_label_selector = self._parse_label_selector(os.getenv("NODE_LABEL_SELECTOR", ""))
+        self.node_label_selector = os.getenv("NODE_LABEL_SELECTOR", "").strip()
         self.cluster_name = os.getenv("CLUSTER_NAME", "unknown")
 
     def _get_bool_env(self, key: str, default: bool) -> bool:
@@ -46,41 +44,17 @@ class Config:
 
         value, unit = int(match.group(1)), match.group(2)
 
-        if unit == "s":
-            return timedelta(seconds=value)
-        elif unit == "m":
-            return timedelta(minutes=value)
-        elif unit == "h":
-            return timedelta(hours=value)
-        elif unit == "d":
-            return timedelta(days=value)
-
-        return timedelta(minutes=10)  # Default fallback
-
-    def _parse_label_selector(self, selector_str: str) -> Dict[str, str]:
-        """
-        Parse label selector string into dictionary.
-
-        Supports formats:
-        - key=value
-        - key1=value1,key2=value2
-        - Empty string (no filtering)
-
-        Examples:
-        - "node-role.kubernetes.io/worker=true"
-        - "instance-type=m5.large,zone=us-west-2a"
-        """
-        if not selector_str.strip():
-            return {}
-
-        labels = {}
-        for pair in selector_str.split(","):
-            pair = pair.strip()
-            if "=" in pair:
-                key, value = pair.split("=", 1)
-                labels[key.strip()] = value.strip()
-
-        return labels
+        match unit:
+            case "s":
+                return timedelta(seconds=value)
+            case "m":
+                return timedelta(minutes=value)
+            case "h":
+                return timedelta(hours=value)
+            case "d":
+                return timedelta(days=value)
+            case _:
+                return timedelta(minutes=10)  # Default fallback
 
     def _parse_finalizer_list(self, finalizer_str: str) -> list[str]:
         """
