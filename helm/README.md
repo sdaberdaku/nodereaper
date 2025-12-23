@@ -1,6 +1,6 @@
 # nodereaper
 
-![Version: 1.2.0](https://img.shields.io/badge/Version-1.2.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v1.2.0](https://img.shields.io/badge/AppVersion-1.2.0v1.2.0-informational?style=flat-square)
+![Version: 1.2.0](https://img.shields.io/badge/Version-1.2.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v1.2.0](https://img.shields.io/badge/AppVersion-v1.2.0-informational?style=flat-square)
 
 A Kubernetes tool for automatically detecting and cleaning up empty nodes
 
@@ -22,7 +22,7 @@ A Kubernetes tool for automatically detecting and cleaning up empty nodes
 |-----|------|---------|-------------|
 | image.repository | string | `"ghcr.io/sdaberdaku/nodereaper"` |  |
 | image.pullPolicy | string | `"IfNotPresent"` |  |
-| image.tag | string | `"latest"` |  |
+| image.tag | string | `""` |  |
 | imagePullSecrets | list | `[]` |  |
 | config.nodeMinAge | string | `"10m"` |  |
 | config.enableFinalizerCleanup | bool | `true` |  |

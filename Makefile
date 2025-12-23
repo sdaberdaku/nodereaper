@@ -143,13 +143,14 @@ run-local:
 version-check:
 	scripts/check-version.sh
 
-.PHONY: version-update
-version-update:
+.PHONY: release
+release:
 	@if [ -z "$(VERSION)" ]; then \
-		echo "Usage: make version-update VERSION=1.0.1"; \
+		echo "Usage: make release VERSION=1.2.0"; \
 		exit 1; \
 	fi
-	scripts/update-version.sh $(VERSION)
+	scripts/prepare-release.sh $(VERSION)
+
 # Cluster management
 .PHONY: setup-cluster
 setup-cluster:
