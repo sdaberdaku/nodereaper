@@ -51,23 +51,23 @@ helm install nodereaper oci://ghcr.io/sdaberdaku/charts/nodereaper \
 
 ### Protection System
 
-NodeReaper uses **exact matching** for all protection and deletion markers:
+NodeReaper uses the following protection and deletion markers:
 
 ```yaml
 config:
-  # Exact taint keys that indicate deletion (no pattern matching)
+  # Taint keys that indicate deletion
   deletionTaints:
     - "karpenter.sh/disrupted"
     - "node.kubernetes.io/unreachable"
     - "node.kubernetes.io/unschedulable"
 
-  # Exact annotation key-value pairs that provide protection
+  # Annotation key-value pairs that provide protection
   protectionAnnotations:
     "karpenter.sh/do-not-evict": "true"
     "cluster-autoscaler.kubernetes.io/scale-down-disabled": "true"
     "nodereaper.io/do-not-delete": "true"
 
-  # Exact label key-value pairs that provide protection
+  # Label key-value pairs that provide protection
   protectionLabels:
     "karpenter.sh/do-not-evict": "true"
     "cluster-autoscaler.kubernetes.io/scale-down-disabled": "true"
