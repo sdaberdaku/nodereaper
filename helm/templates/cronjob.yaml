@@ -1,0 +1,112 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "nodereaper.fullname" . }}
+  namespace: {{ include "nodereaper.namespace" . }}
+  labels:
+    {{- include "nodereaper.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.cronjob.schedule | quote }}
+  successfulJobsHistoryLimit: {{ .Values.cronjob.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.cronjob.failedJobsHistoryLimit }}
+  {{- with .Values.cronjob.startingDeadlineSeconds }}
+  startingDeadlineSeconds: {{ . }}
+  {{- end }}
+  concurrencyPolicy: {{ .Values.cronjob.concurrencyPolicy }}
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- include "nodereaper.selectorLabels" . | nindent 12 }}
+            {{- with .Values.podLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.podAnnotations }}
+          annotations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        spec:
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          serviceAccountName: {{ include "nodereaper.serviceAccountName" . }}
+          securityContext:
+            {{- toYaml .Values.podSecurityContext | nindent 12 }}
+          restartPolicy: {{ .Values.cronjob.restartPolicy }}
+          containers:
+          - name: {{ .Chart.Name }}
+            securityContext:
+              {{- toYaml .Values.securityContext | nindent 14 }}
+            image: {{ include "nodereaper.image" . }}
+            imagePullPolicy: {{ .Values.image.pullPolicy }}
+            command: ["nodereaper"]
+            env:
+            - name: ENABLE_FINALIZER_CLEANUP
+              value: {{ .Values.config.enableFinalizerCleanup | quote }}
+            {{- if .Values.config.removableFinalizers }}
+            - name: REMOVABLE_FINALIZERS
+              value: {{ join "," .Values.config.removableFinalizers | quote }}
+            {{- end }}
+            {{- if .Values.config.clusterName }}
+            - name: CLUSTER_NAME
+              value: {{ .Values.config.clusterName | quote }}
+            {{- end }}
+            {{- if .Values.config.unhealthyTaints }}
+            - name: UNHEALTHY_TAINTS
+              value: {{ join "," .Values.config.unhealthyTaints | quote }}
+            {{- end }}
+            - name: DELETION_TIMEOUT
+              value: {{ .Values.config.deletionTimeout | quote }}
+            - name: DRY_RUN
+              value: {{ .Values.config.dryRun | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
+            - name: ENABLE_JSON_LOGS
+              value: {{ .Values.config.enableJsonLogs | quote }}
+            - name: NODE_MIN_AGE
+              value: {{ .Values.config.nodeMinAge | quote }}
+            {{- if .Values.config.nodeLabelSelector }}
+            - name: NODE_LABEL_SELECTOR
+              value: {{ $pairs := list }}{{- range $key, $value := .Values.config.nodeLabelSelector }}{{- $pairs = append $pairs (printf "%s=%s" $key ($value | toString)) }}{{- end }}{{ join "," $pairs | quote }}
+            {{- end }}
+            {{- if .Values.config.protectionAnnotations }}
+            - name: PROTECTION_ANNOTATIONS
+              value: {{ $pairs := list }}{{ range $key, $value := .Values.config.protectionAnnotations }}{{ $pairs = append $pairs (printf "%s=%s" $key $value) }}{{ end }}{{ join "," $pairs | quote }}
+            {{- end }}
+            {{- if .Values.config.protectionLabels }}
+            - name: PROTECTION_LABELS
+              value: {{ $pairs := list }}{{ range $key, $value := .Values.config.protectionLabels }}{{ $pairs = append $pairs (printf "%s=%s" $key $value) }}{{ end }}{{ join "," $pairs | quote }}
+            {{- end }}
+            {{- if .Values.slack.enabled }}
+            {{- if .Values.slack.existingSecret.name }}
+            - name: SLACK_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.slack.existingSecret.name }}
+                  key: {{ .Values.slack.existingSecret.key }}
+                  optional: false
+            {{- else if .Values.slack.webhookUrl }}
+            - name: SLACK_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nodereaper.fullname" . }}-slack
+                  key: slack-webhook-url
+                  optional: false
+            {{- end }}
+            {{- end }}
+            resources:
+              {{- toYaml .Values.resources | nindent 14 }}
+          {{- with .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}

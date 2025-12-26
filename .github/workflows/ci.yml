@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          scripts/setup-dev.sh
+
+      - name: Format check with black
+        run: |
+          black --check --line-length=100 src/ tests/
+
+      - name: Import order check with isort
+        run: |
+          isort --check-only --profile=black --line-length=100 src/ tests/
+
+      - name: Lint with flake8
+        run: |
+          flake8 src/ tests/
+
+      - name: Run unit tests with pytest
+        run: |
+          pytest tests/ -v --cov=src --cov-report=xml --cov-report=term-missing -m "not integration"
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "3.14.0"
+
+      - name: Lint Helm chart
+        run: |
+          helm lint helm/
+
+      - name: Test Helm template
+        run: |
+          helm template nodereaper helm/ --debug
+
+  integration-test:
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          scripts/setup-dev.sh
+
+      - name: Set up kind
+        uses: helm/kind-action@v1.8.0
+        with:
+          config: tests/integration/kind-config.yaml
+          cluster_name: nodereaper-test
+
+      - name: Run integration tests
+        run: |
+          SKIP_SETUP=true scripts/run-integration-tests.sh
+
+      - name: Build and test Helm chart
+        run: |
+          scripts/test-helm-chart.sh nodereaper-test
+
+      - name: Clean up
+        if: always()
+        run: |
+          scripts/cleanup.sh

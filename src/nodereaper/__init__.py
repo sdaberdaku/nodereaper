@@ -1,0 +1,10 @@
+"""
+NodeReaper package initialization and version information.
+
+SPDX-License-Identifier: Apache-2.0
+Copyright 2025 Sebastian Daberdaku
+"""
+
+__version__ = "1.0.0"
+__author__ = "Sebastian Daberdaku"
+__email__ = "sdaberdaku@users.noreply.github.com"

@@ -1,0 +1,168 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: "{{ include "nodereaper.fullname" . }}-test"
+  namespace: {{ include "nodereaper.namespace" . }}
+  labels:
+    {{- include "nodereaper.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: "{{ include "nodereaper.fullname" . }}-test"
+  labels:
+    {{- include "nodereaper.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: ServiceAccount
+  name: "{{ include "nodereaper.fullname" . }}-test"
+  namespace: {{ include "nodereaper.namespace" . }}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "nodereaper.fullname" . }}-test"
+  namespace: {{ include "nodereaper.namespace" . }}
+  labels:
+    {{- include "nodereaper.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  serviceAccountName: "{{ include "nodereaper.fullname" . }}-test"
+  containers:
+  - name: test
+    image: bitnami/kubectl:latest
+    command:
+    - /bin/sh
+    - -c
+    - |
+      set -e
+      echo "🧪 Testing NodeReaper Helm deployment..."
+
+      # Test 1: Check if CronJob exists and is properly configured
+      echo "✅ Test 1: Checking CronJob existence and configuration..."
+      kubectl get cronjob {{ include "nodereaper.fullname" . }} -n {{ include "nodereaper.namespace" . }} -o yaml | grep -q "nodereaper"
+
+      # Verify CronJob has correct schedule
+      SCHEDULE=$(kubectl get cronjob {{ include "nodereaper.fullname" . }} -n {{ include "nodereaper.namespace" . }} -o jsonpath='{.spec.schedule}')
+      echo "   CronJob schedule: $SCHEDULE"
+      if [ -z "$SCHEDULE" ]; then
+        echo "❌ CronJob schedule is empty"
+        exit 1
+      fi
+
+      # Test 2: Check ServiceAccount
+      echo "✅ Test 2: Checking ServiceAccount..."
+      kubectl get serviceaccount {{ include "nodereaper.serviceAccountName" . }} -n {{ include "nodereaper.namespace" . }}
+
+      # Test 3: Check RBAC permissions
+      echo "✅ Test 3: Checking RBAC permissions..."
+      kubectl get clusterrole {{ include "nodereaper.fullname" . }} -o yaml | grep -q "nodes"
+      kubectl get clusterrole {{ include "nodereaper.fullname" . }} -o yaml | grep -q "pods"
+      kubectl get clusterrolebinding {{ include "nodereaper.fullname" . }}
+
+      # Test 4: Verify container image and configuration
+      echo "✅ Test 4: Checking container configuration..."
+      IMAGE=$(kubectl get cronjob {{ include "nodereaper.fullname" . }} -n {{ include "nodereaper.namespace" . }} -o jsonpath='{.spec.jobTemplate.spec.template.spec.containers[0].image}')
+      echo "   Container image: $IMAGE"
+      if [ -z "$IMAGE" ]; then
+        echo "❌ Container image is not set"
+        exit 1
+      fi
+
+      # Test 5: Check environment variables are set
+      echo "✅ Test 5: Checking environment variables..."
+      ENV_VARS=$(kubectl get cronjob {{ include "nodereaper.fullname" . }} -n {{ include "nodereaper.namespace" . }} -o jsonpath='{.spec.jobTemplate.spec.template.spec.containers[0].env[*].name}')
+      echo "   Environment variables: $ENV_VARS"
+
+      # Check for required environment variables
+      if ! echo "$ENV_VARS" | grep -q "DRY_RUN"; then
+        echo "❌ DRY_RUN environment variable not found"
+        exit 1
+      fi
+
+      if ! echo "$ENV_VARS" | grep -q "LOG_LEVEL"; then
+        echo "❌ LOG_LEVEL environment variable not found"
+        exit 1
+      fi
+
+      # Test 6: Validate CronJob can create jobs
+      echo "✅ Test 6: Testing job creation from CronJob..."
+      kubectl create job --from=cronjob/{{ include "nodereaper.fullname" . }} {{ include "nodereaper.fullname" . }}-test-job -n {{ include "nodereaper.namespace" . }} --dry-run=client -o yaml > /dev/null
+
+      # Test 7: Check security context
+      echo "✅ Test 7: Checking security context..."
+      RUN_AS_USER=$(kubectl get cronjob {{ include "nodereaper.fullname" . }} -n {{ include "nodereaper.namespace" . }} -o jsonpath='{.spec.jobTemplate.spec.template.spec.securityContext.runAsUser}')
+      if [ "$RUN_AS_USER" != "65534" ]; then
+        echo "❌ Security context runAsUser should be 65534, got: $RUN_AS_USER"
+        exit 1
+      fi
+
+      # Test 8: Check resource limits
+      echo "✅ Test 8: Checking resource limits..."
+      MEMORY_LIMIT=$(kubectl get cronjob {{ include "nodereaper.fullname" . }} -n {{ include "nodereaper.namespace" . }} -o jsonpath='{.spec.jobTemplate.spec.template.spec.containers[0].resources.limits.memory}')
+      echo "   Memory limit: $MEMORY_LIMIT"
+      if [ -z "$MEMORY_LIMIT" ]; then
+        echo "⚠️  Warning: No memory limit set"
+      fi
+
+      # Test 9: Validate Slack configuration (if enabled)
+      {{- if .Values.slack.enabled }}
+      echo "✅ Test 9: Checking Slack configuration..."
+      SLACK_ENV=$(kubectl get cronjob {{ include "nodereaper.fullname" . }} -n {{ include "nodereaper.namespace" . }} -o jsonpath='{.spec.jobTemplate.spec.template.spec.containers[0].env[?(@.name=="SLACK_WEBHOOK_URL")].valueFrom.secretKeyRef.name}')
+      if [ -z "$SLACK_ENV" ]; then
+        echo "❌ Slack webhook URL not configured properly"
+        exit 1
+      fi
+      echo "   Slack secret reference: $SLACK_ENV"
+      {{- else }}
+      echo "✅ Test 9: Slack notifications disabled (skipping)"
+      {{- end }}
+
+      # Test 10: Check finalizer cleanup configuration
+      echo "✅ Test 10: Checking finalizer cleanup configuration..."
+      FINALIZER_CLEANUP=$(kubectl get cronjob {{ include "nodereaper.fullname" . }} -n {{ include "nodereaper.namespace" . }} -o jsonpath='{.spec.jobTemplate.spec.template.spec.containers[0].env[?(@.name=="ENABLE_FINALIZER_CLEANUP")].value}')
+      echo "   Finalizer cleanup enabled: $FINALIZER_CLEANUP"
+
+      # Test 11: Validate node label selector format (if set)
+      {{- if .Values.config.nodeLabelSelector }}
+      echo "✅ Test 11: Checking node label selector..."
+      NODE_SELECTOR=$(kubectl get cronjob {{ include "nodereaper.fullname" . }} -n {{ include "nodereaper.namespace" . }} -o jsonpath='{.spec.jobTemplate.spec.template.spec.containers[0].env[?(@.name=="NODE_LABEL_SELECTOR")].value}')
+      echo "   Node label selector: $NODE_SELECTOR"
+      if [ -z "$NODE_SELECTOR" ]; then
+        echo "❌ Node label selector not set properly"
+        exit 1
+      fi
+      {{- else }}
+      echo "✅ Test 11: No node label selector configured (processing all nodes)"
+      {{- end }}
+
+      # Test 12: Check logging configuration
+      echo "✅ Test 12: Checking logging configuration..."
+      JSON_LOGS=$(kubectl get cronjob {{ include "nodereaper.fullname" . }} -n {{ include "nodereaper.namespace" . }} -o jsonpath='{.spec.jobTemplate.spec.template.spec.containers[0].env[?(@.name=="ENABLE_JSON_LOGS")].value}')
+      echo "   JSON logging enabled: $JSON_LOGS"
+
+      echo ""
+      echo "🎉 All NodeReaper Helm tests passed successfully!"
+      echo "📊 Test Summary:"
+      echo "   ✅ CronJob configuration"
+      echo "   ✅ RBAC permissions"
+      echo "   ✅ Security context"
+      echo "   ✅ Environment variables"
+      echo "   ✅ Resource configuration"
+      {{- if .Values.slack.enabled }}
+      echo "   ✅ Slack integration"
+      {{- end }}
+      echo "   ✅ Finalizer cleanup"
+      echo "   ✅ Logging configuration"

@@ -1,0 +1,34 @@
+1. NodeReaper has been deployed as a CronJob in the {{ include "nodereaper.namespace" . }} namespace.
+
+2. Configuration:
+   - Schedule: {{ .Values.cronjob.schedule }}
+   - Dry Run: {{ .Values.config.dryRun }}
+   - Min Node Age: {{ .Values.config.nodeMinAge }}
+   - Log Level: {{ .Values.config.logLevel }}
+
+3. To check the CronJob status:
+   kubectl get cronjob {{ include "nodereaper.fullname" . }} -n {{ include "nodereaper.namespace" . }}
+
+4. To view recent job runs:
+   kubectl get jobs -n {{ include "nodereaper.namespace" . }} -l app.kubernetes.io/name={{ include "nodereaper.name" . }}
+
+5. To check logs from the latest job:
+   kubectl logs -n {{ include "nodereaper.namespace" . }} -l job-name=$(kubectl get jobs -n {{ include "nodereaper.namespace" . }} -l app.kubernetes.io/name={{ include "nodereaper.name" . }} --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[-1].metadata.name}')
+
+6. To trigger a manual run:
+   kubectl create job --from=cronjob/{{ include "nodereaper.fullname" . }} {{ include "nodereaper.fullname" . }}-manual -n {{ include "nodereaper.namespace" . }}
+
+{{- if .Values.config.dryRun }}
+
+⚠️  DRY RUN MODE IS ENABLED
+NodeReaper will only log what it would do without actually deleting nodes.
+To enable actual node deletion, set config.dryRun to false.
+{{- end }}
+
+{{- if not .Values.slack.enabled }}
+
+💡 Slack notifications are disabled.
+To enable Slack notifications:
+1. Set slack.enabled to true
+2. Provide slack.webhookUrl or use slack.existingSecret
+{{- end }}
