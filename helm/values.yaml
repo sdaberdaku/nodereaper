@@ -23,16 +23,16 @@ config:
     - node.kubernetes.io/unreachable
     - node.kubernetes.io/unschedulable
 
-  # Annotations that provide permanent protection from deletion (map of key-value pairs)
+  # Annotations that provide permanent protection from deletion (list of key=value pairs)
   # Nodes with these exact annotation key-value pairs will never be deleted by NodeReaper
   protectionAnnotations:
-    karpenter.sh/do-not-evict: "true"
-    cluster-autoscaler.kubernetes.io/scale-down-disabled: "true"
-    nodereaper.io/do-not-delete: "true"
+    - karpenter.sh/do-not-evict=true
+    - cluster-autoscaler.kubernetes.io/scale-down-disabled=true
+    - nodereaper.io/do-not-delete=true
 
-  # Labels that provide permanent protection from deletion (map of key-value pairs)
+  # Labels that provide permanent protection from deletion (list of key=value pairs)
   # Nodes with these exact label key-value pairs will never be deleted by NodeReaper
-  protectionLabels: { }
+  protectionLabels: [ ]
 
   # Enable finalizer cleanup for stuck nodes
   enableFinalizerCleanup: true

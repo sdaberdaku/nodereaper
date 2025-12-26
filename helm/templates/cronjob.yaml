@@ -73,11 +73,11 @@ spec:
             {{- end }}
             {{- if .Values.config.protectionAnnotations }}
             - name: PROTECTION_ANNOTATIONS
-              value: {{ $pairs := list }}{{ range $key, $value := .Values.config.protectionAnnotations }}{{ $pairs = append $pairs (printf "%s=%s" $key $value) }}{{ end }}{{ join "," $pairs | quote }}
+              value: {{ join "," .Values.config.protectionAnnotations | quote }}
             {{- end }}
             {{- if .Values.config.protectionLabels }}
             - name: PROTECTION_LABELS
-              value: {{ $pairs := list }}{{ range $key, $value := .Values.config.protectionLabels }}{{ $pairs = append $pairs (printf "%s=%s" $key $value) }}{{ end }}{{ join "," $pairs | quote }}
+              value: {{ join "," .Values.config.protectionLabels | quote }}
             {{- end }}
             {{- if .Values.slack.enabled }}
             {{- if .Values.slack.existingSecret.name }}
