@@ -70,9 +70,12 @@ class NodeReaper:
             node_name = node.metadata.name
             logger.debug(f"Processing node: {node_name}")
             if self.node_analyzer.is_terminating(node):
-                logger.info(f"Node {node_name} is in terminating state")
+                logger.debug(f"Node {node_name} is in terminating state")
                 # Analyze if finalizers should be cleaned up
                 should_cleanup, reason = self.node_analyzer.should_cleanup_finalizers(node)
+                logger.debug(
+                    f"Node: {node_name}, should_cleanup: '{should_cleanup}', reason: '{reason}'"
+                )
                 if should_cleanup:
                     error_msg = None
                     if not self.dry_run and self.enable_finalizer_cleanup:
@@ -97,7 +100,7 @@ class NodeReaper:
                         )
                     )
             else:
-                logger.info(f"Node {node_name} is not in terminating state")
+                logger.debug(f"Node {node_name} is not in terminating state")
                 # Get pods on this node
                 pods = self.k8s_client.list_pods_on_node(node_name)
                 # Analyze if node should be deleted

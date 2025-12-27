@@ -32,7 +32,7 @@ def send_slack_notification(message: str, slack_webhook_url: str = None) -> None
         response.raise_for_status()
 
         logger.info(
-            f"Slack notification message sent: '{message}'."
+            f"Slack notification message sent: '{message}'. "
             f"Response: {response.status_code} '{response.text}'"
         )
     except requests.RequestException as e:
