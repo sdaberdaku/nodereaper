@@ -96,6 +96,47 @@ spec:
                   optional: false
             {{- end }}
             {{- end }}
+            {{- if .Values.prometheus.enabled }}
+            - name: PROMETHEUS_ENABLED
+              value: {{ .Values.prometheus.enabled | quote }}
+            {{- if .Values.prometheus.url }}
+            - name: PROMETHEUS_URL
+              value: {{ .Values.prometheus.url | quote }}
+            {{- end }}
+            - name: PROMETHEUS_MIN_EMPTY_DURATION
+              value: {{ .Values.prometheus.minEmptyDuration | quote }}
+            - name: PROMETHEUS_TIMEOUT
+              value: {{ .Values.prometheus.timeout | quote }}
+            {{- if .Values.prometheus.authentication.enabled }}
+            {{- if .Values.prometheus.authentication.existingSecret.name }}
+            - name: PROMETHEUS_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.prometheus.authentication.existingSecret.name }}
+                  key: {{ .Values.prometheus.authentication.existingSecret.usernameKey }}
+                  optional: true
+            - name: PROMETHEUS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.prometheus.authentication.existingSecret.name }}
+                  key: {{ .Values.prometheus.authentication.existingSecret.passwordKey }}
+                  optional: true
+            {{- else if and .Values.prometheus.authentication.username .Values.prometheus.authentication.password }}
+            - name: PROMETHEUS_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nodereaper.fullname" . }}-prometheus
+                  key: username
+                  optional: false
+            - name: PROMETHEUS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nodereaper.fullname" . }}-prometheus
+                  key: password
+                  optional: false
+            {{- end }}
+            {{- end }}
+            {{- end }}
             resources:
               {{- toYaml .Values.resources | nindent 14 }}
           {{- with .Values.nodeSelector }}

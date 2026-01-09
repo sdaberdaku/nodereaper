@@ -1,6 +1,6 @@
 # nodereaper
 
-![Version: 1.1.1](https://img.shields.io/badge/Version-1.1.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v1.1.1](https://img.shields.io/badge/AppVersion-v1.1.1-informational?style=flat-square)
+![Version: 1.2.0](https://img.shields.io/badge/Version-1.2.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v1.2.0](https://img.shields.io/badge/AppVersion-v1.2.0-informational?style=flat-square)
 
 A Kubernetes tool for automatically detecting and cleaning up empty nodes
 
@@ -48,6 +48,16 @@ A Kubernetes tool for automatically detecting and cleaning up empty nodes
 | cronjob.startingDeadlineSeconds | int | `300` |  |
 | cronjob.concurrencyPolicy | string | `"Forbid"` |  |
 | cronjob.restartPolicy | string | `"OnFailure"` |  |
+| prometheus.enabled | bool | `false` |  |
+| prometheus.url | string | `""` |  |
+| prometheus.minEmptyDuration | string | `"10m"` |  |
+| prometheus.timeout | string | `"30s"` |  |
+| prometheus.authentication.enabled | bool | `false` |  |
+| prometheus.authentication.existingSecret.name | string | `""` |  |
+| prometheus.authentication.existingSecret.usernameKey | string | `"username"` |  |
+| prometheus.authentication.existingSecret.passwordKey | string | `"password"` |  |
+| prometheus.authentication.username | string | `""` |  |
+| prometheus.authentication.password | string | `""` |  |
 | slack.enabled | bool | `false` |  |
 | slack.webhookUrl | string | `""` |  |
 | slack.existingSecret.name | string | `""` |  |

@@ -8,5 +8,6 @@ Copyright 2025 Sebastian Daberdaku
 from nodereaper.k8s.client import KubernetesClient
 from nodereaper.k8s.exception import KubernetesException
 from nodereaper.k8s.node import NodeAnalyzer
+from nodereaper.k8s.prometheus import PrometheusClient
 
-__all__ = ["KubernetesClient", "KubernetesException", "NodeAnalyzer"]
+__all__ = ["KubernetesClient", "KubernetesException", "NodeAnalyzer", "PrometheusClient"]
