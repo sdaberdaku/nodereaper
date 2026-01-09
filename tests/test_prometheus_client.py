@@ -204,7 +204,7 @@ class TestPrometheusClient:
         expected_query = (
             "max_over_time("
             '(count by (node) (kube_pod_info{created_by_kind!="DaemonSet"}))'
-            "[600.0s:])"
+            "[600s:])"
         )
         mock_get.assert_called_once_with(
             "http://prometheus:9090/api/v1/query",

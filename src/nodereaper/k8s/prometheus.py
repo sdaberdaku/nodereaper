@@ -56,6 +56,10 @@ class PrometheusClient:
 
         logger.info(f"Prometheus client initialized with URL: {self.url}")
 
+    def _min_empty_duration_seconds(self) -> int:
+        """Return minimum empty duration in seconds."""
+        return int(self.min_empty_duration.total_seconds())
+
     def get_non_empty_nodes(self) -> set[str]:
         """
         Return set of nodes that had non-DaemonSet Pods in the last `self.min_empty_duration`.
@@ -68,7 +72,7 @@ class PrometheusClient:
         query = (
             f"max_over_time("
             f'(count by (node) (kube_pod_info{{created_by_kind!="DaemonSet"}})'
-            f")[{self.min_empty_duration.total_seconds()}s:])"
+            f")[{self._min_empty_duration_seconds()}s:])"
         )
 
         response = self._run_query(query)
