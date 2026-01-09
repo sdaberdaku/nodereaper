@@ -95,3 +95,11 @@ ENABLE_JSON_LOGS = _get_bool_env("ENABLE_JSON_LOGS", True)
 NODE_LABEL_SELECTOR = os.getenv("NODE_LABEL_SELECTOR", "").strip()
 CLUSTER_NAME = os.getenv("CLUSTER_NAME", "unknown")
 TEST_KUBE_CONTEXT_NAME = os.getenv("TEST_KUBE_CONTEXT_NAME", "kind-nodereaper-test")
+
+"""Prometheus Settings"""
+PROMETHEUS_ENABLED = _get_bool_env("PROMETHEUS_ENABLED", False)
+PROMETHEUS_URL = os.getenv("PROMETHEUS_URL", "").rstrip("/")
+PROMETHEUS_USERNAME = os.getenv("PROMETHEUS_USERNAME", "")
+PROMETHEUS_PASSWORD = os.getenv("PROMETHEUS_PASSWORD", "")
+PROMETHEUS_TIMEOUT = _parse_duration(os.getenv("PROMETHEUS_TIMEOUT", "30s"))
+PROMETHEUS_MIN_EMPTY_DURATION = _parse_duration(os.getenv("PROMETHEUS_MIN_EMPTY_DURATION", "10m"))

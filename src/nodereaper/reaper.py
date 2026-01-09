@@ -10,10 +10,15 @@ from typing import Literal
 
 from kubernetes import client as k8s
 
-from nodereaper.k8s import KubernetesClient, NodeAnalyzer
+from nodereaper.k8s import KubernetesClient, NodeAnalyzer, PrometheusClient
 from nodereaper.k8s.exception import KubernetesException
 from nodereaper.notification import send_notification
-from nodereaper.settings import DRY_RUN, ENABLE_FINALIZER_CLEANUP, NODE_LABEL_SELECTOR
+from nodereaper.settings import (
+    DRY_RUN,
+    ENABLE_FINALIZER_CLEANUP,
+    NODE_LABEL_SELECTOR,
+    PROMETHEUS_ENABLED,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +31,7 @@ class NodeReaper:
         dry_run: bool = None,
         enable_finalizer_cleanup: bool = None,
         node_label_selector: str = None,
+        prometheus_enabled: bool = None,
     ) -> None:
         """Initialize NodeReaper.
 
@@ -34,6 +40,9 @@ class NodeReaper:
         :param node_label_selector: Label selector to filter nodes
         """
         self.dry_run = DRY_RUN if dry_run is None else dry_run
+        self.prometheus_enabled = (
+            PROMETHEUS_ENABLED if prometheus_enabled is None else prometheus_enabled
+        )
         self.enable_finalizer_cleanup = (
             ENABLE_FINALIZER_CLEANUP
             if enable_finalizer_cleanup is None
@@ -45,7 +54,14 @@ class NodeReaper:
         # Initialize components
         self.k8s_client = KubernetesClient()
         self.node_analyzer = NodeAnalyzer()
-        logger.info(f"NodeReaper initialized with dry_run: {self.dry_run}")
+        self.prometheus_client = PrometheusClient() if self.prometheus_enabled else None
+        logger.info(
+            f"NodeReaper initialized with "
+            f"dry_run={self.dry_run}, "
+            f"enable_finalizer_cleanup={self.enable_finalizer_cleanup}, "
+            f"node_label_selector={self.node_label_selector}, "
+            f"prometheus_enabled={self.prometheus_enabled}"
+        )
 
     def run(self) -> None:
         """Run NodeReaper."""
@@ -55,11 +71,16 @@ class NodeReaper:
 
     def process_nodes(self) -> None:
         """Process all nodes in the cluster."""
+        notifications = []
+
         if self.node_label_selector:
             logger.info(f"Using node label selector: {self.node_label_selector}")
         else:
             logger.info("No node label selector specified, processing all nodes")
 
+        non_empty_nodes = (
+            self.prometheus_client.get_non_empty_nodes() if self.prometheus_enabled else set()
+        )
         try:
             nodes = self.k8s_client.list_nodes(self.node_label_selector)
         except KubernetesException as e:
@@ -90,7 +111,7 @@ class NodeReaper:
                                 f"Failed to cleanup node finalizers '{node_name}': {e}"
                             )
                             error_msg = str(e)
-                    send_notification(
+                    notifications.append(
                         self._format_message(
                             node=node,
                             reason=reason,
@@ -104,7 +125,13 @@ class NodeReaper:
                 # Get pods on this node
                 pods = self.k8s_client.list_pods_on_node(node_name)
                 # Analyze if node should be deleted
-                should_delete, reason = self.node_analyzer.should_delete_node(node, pods)
+                if node_name in non_empty_nodes:
+                    should_delete, reason = (
+                        False,
+                        "Node recently had non-DaemonSet Pods (per Prometheus data)",
+                    )
+                else:
+                    should_delete, reason = self.node_analyzer.should_delete_node(node, pods)
                 logger.debug(
                     f"Node: {node_name}, should_delete: '{should_delete}', reason: '{reason}'"
                 )
@@ -116,7 +143,7 @@ class NodeReaper:
                         except KubernetesException as e:
                             logger.exception(f"Failed to delete node '{node_name}': {e}")
                             error_msg = str(e)
-                    send_notification(
+                    notifications.append(
                         self._format_message(
                             node=node,
                             reason=reason,
@@ -125,6 +152,9 @@ class NodeReaper:
                             action="delete",
                         )
                     )
+
+        if notifications:
+            send_notification("\n\n".join(notifications))
 
     def _format_message(
         self,

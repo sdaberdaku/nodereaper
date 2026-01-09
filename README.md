@@ -27,9 +27,10 @@ Sometimes autoscalers (Cluster Autoscaler, Karpenter, etc.) fail to scale down e
 2. **Skips protected nodes** with protection annotations or labels
 3. **Waits for minimum age** before considering nodes for deletion
 4. **Identifies empty nodes** that only run DaemonSet pods
-5. **Removes unhealthy nodes** that are unreachable or not ready
-6. **Cleans stuck finalizers** from nodes that won't terminate
-7. **Sends notifications** when nodes are deleted
+5. **Uses Prometheus metrics** (optional) to track how long nodes have been empty
+6. **Removes unhealthy nodes** that are unreachable or not ready
+7. **Cleans stuck finalizers** from nodes that won't terminate
+8. **Sends notifications** when nodes are deleted
 
 
 ## Quick Start
@@ -40,6 +41,36 @@ helm install nodereaper oci://ghcr.io/sdaberdaku/charts/nodereaper \
   --namespace nodereaper \
   --create-namespace
 ```
+
+### Prometheus Integration (Optional)
+
+Enable Prometheus integration to track node empty duration more accurately:
+
+```yaml
+# values.yaml - With authentication
+prometheus:
+  enabled: true
+  url: "http://prometheus-server:9090"
+  minEmptyDuration: "10m"  # Only delete nodes empty for 10+ minutes
+  authentication:
+    enabled: true
+    existingSecret:
+      name: "prometheus-credentials"
+      usernameKey: "username"
+      passwordKey: "password"
+```
+
+```yaml
+# values.yaml - Without authentication (for internal/development use)
+prometheus:
+  enabled: true
+  url: "http://prometheus-server:9090"
+  minEmptyDuration: "10m"
+  auth:
+    enabled: false  # No authentication required
+```
+
+When enabled, NodeReaper queries Prometheus to determine how long nodes have been empty, providing more precise deletion timing than age-based logic alone.
 
 ## Safety Features
 

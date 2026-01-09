@@ -89,6 +89,37 @@ cronjob:
   # Restart policy for the job pods
   restartPolicy: OnFailure
 
+# Prometheus integration for tracking node utilization
+prometheus:
+  # Enable Prometheus integration
+  enabled: false
+
+  # Prometheus server URL (e.g., http://prometheus-server:9090)
+  url: ""
+
+  # Minimum duration a node must be empty before deletion (e.g., 10m, 30m, 1h)
+  # This overrides the age-based logic when Prometheus is available
+  minEmptyDuration: "10m"
+
+  # Connection timeout for Prometheus queries (e.g., 30s, 1m)
+  timeout: "30s"
+
+  # Authentication configuration
+  authentication:
+    # Enable basic authentication (set to false for no authentication)
+    enabled: false
+
+    # Use existing secret for Prometheus credentials
+    existingSecret:
+      name: ""
+      usernameKey: "username"
+      passwordKey: "password"
+
+    # Basic auth credentials (can be set via existing secret)
+    # Only used when auth.enabled is true
+    username: ""
+    password: ""
+
 # Slack notifications
 slack:
   # Enable Slack notifications
