@@ -11,7 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Finalizer cleanup now removes finalizers. It sent a strategic merge patch, which merges
   `metadata.finalizers` with the existing list instead of replacing it, so nodes stuck in
   terminating state kept their finalizers and were reported again on every run. It now
-  sends a JSON patch that replaces the list.
+  sends a JSON patch that replaces the list, guarded by a test on the node UID so a new node
+  registered under the same name is never touched.
 - A Kubernetes API error on one node no longer aborts the run: the node is skipped, and
   notifications for nodes already processed are always sent.
 - No "cleanup" notification is sent when finalizer cleanup is disabled.
