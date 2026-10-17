@@ -60,12 +60,12 @@ class PrometheusClient:
         """Return minimum empty duration in seconds."""
         return int(self.min_empty_duration.total_seconds())
 
-    def get_non_empty_nodes(self) -> set[str]:
+    def get_non_empty_nodes(self) -> set[str] | None:
         """
         Return set of nodes that had non-DaemonSet Pods in the last `self.min_empty_duration`.
         This runs one query and returns a set of node names.
 
-        :return: Set of node names with non-DaemonSet Pods.
+        :return: Set of node names with non-DaemonSet Pods, or None if the query failed.
         """
 
         # This query returns values only for non-empty nodes
@@ -76,6 +76,8 @@ class PrometheusClient:
         )
 
         response = self._run_query(query)
+        if not response:
+            return None
         result: list[dict] = response.get("data", {}).get("result", [])
         nonempty_nodes: set[str | None] = {
             series.get("metric", {}).get("node") for series in result

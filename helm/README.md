@@ -1,6 +1,6 @@
 # nodereaper
 
-![Version: 1.2.1](https://img.shields.io/badge/Version-1.2.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v1.2.1](https://img.shields.io/badge/AppVersion-v1.2.1-informational?style=flat-square)
+![Version: 1.3.0](https://img.shields.io/badge/Version-1.3.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v1.3.0](https://img.shields.io/badge/AppVersion-v1.3.0-informational?style=flat-square)
 
 A Kubernetes tool for automatically detecting and cleaning up empty nodes
 
@@ -25,18 +25,14 @@ A Kubernetes tool for automatically detecting and cleaning up empty nodes
 | image.tag | string | `""` |  |
 | imagePullSecrets | list | `[]` |  |
 | config.nodeMinAge | string | `"30m"` |  |
-| config.unhealthyTaints[0] | string | `"node.kubernetes.io/network-unavailable"` |  |
-| config.unhealthyTaints[1] | string | `"node.kubernetes.io/not-ready"` |  |
-| config.unhealthyTaints[2] | string | `"node.kubernetes.io/unreachable"` |  |
-| config.unhealthyTaints[3] | string | `"node.kubernetes.io/unschedulable"` |  |
+| config.unhealthyTaints | list | `[]` |  |
 | config.protectionAnnotations[0] | string | `"karpenter.sh/do-not-evict=true"` |  |
 | config.protectionAnnotations[1] | string | `"cluster-autoscaler.kubernetes.io/scale-down-disabled=true"` |  |
 | config.protectionAnnotations[2] | string | `"nodereaper.io/do-not-delete=true"` |  |
 | config.protectionLabels | list | `[]` |  |
 | config.enableFinalizerCleanup | bool | `true` |  |
 | config.deletionTimeout | string | `"15m"` |  |
-| config.removableFinalizers[0] | string | `"karpenter.sh/termination"` |  |
-| config.removableFinalizers[1] | string | `"node.kubernetes.io/exclude-from-external-load-balancers"` |  |
+| config.removableFinalizers | list | `[]` |  |
 | config.dryRun | bool | `false` |  |
 | config.logLevel | string | `"INFO"` |  |
 | config.enableJsonLogs | bool | `true` |  |

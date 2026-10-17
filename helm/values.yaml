@@ -16,12 +16,12 @@ config:
   # Minimum age before a node can be deleted (e.g., 10m, 1h, 30s)
   nodeMinAge: "30m"
 
-  # Taints that indicate a node is probably unhealthy (list) and should be considered for deletion.
-  unhealthyTaints:
-    - node.kubernetes.io/network-unavailable
-    - node.kubernetes.io/not-ready
-    - node.kubernetes.io/unreachable
-    - node.kubernetes.io/unschedulable
+  # Taints that mark a node for deletion even if it still runs workloads (list).
+  # A node with one of these taints is deleted on the next run, without any grace period.
+  # Nodes that are NotReady or unreachable are already handled through their Ready condition
+  # (see deletionTimeout), so the node.kubernetes.io/not-ready and unreachable taints are not
+  # needed here. Do not add node.kubernetes.io/unschedulable: kubectl cordon adds it.
+  unhealthyTaints: [ ]
 
   # Annotations that provide permanent protection from deletion (list of key=value pairs)
   # Nodes with these exact annotation key-value pairs will never be deleted by NodeReaper
@@ -37,17 +37,16 @@ config:
   # Enable finalizer cleanup for stuck nodes
   enableFinalizerCleanup: true
 
-  # Timeout before taking over nodes marked for deletion (e.g., 15m, 30m, 1h)
-  # Nodes marked for deletion will be protected for this duration, after which
-  # NodeReaper will take over and delete them if they meet deletion criteria
+  # How long a node must be NotReady or unreachable before it is deleted, and how long a node
+  # must be stuck terminating before its removable finalizers are cleaned up (e.g., 15m, 1h)
   deletionTimeout: "15m"
 
   # Finalizers that are safe to remove when nodes are stuck terminating (list)
-  # Only finalizers with these exact names will be removed during cleanup
-  # Default includes common safe finalizers that are typically safe to remove
-  removableFinalizers:
-    - karpenter.sh/termination
-    - node.kubernetes.io/exclude-from-external-load-balancers
+  # Only finalizers with these exact names will be removed during cleanup.
+  # Do not list karpenter.sh/termination: it holds the node while Karpenter drains its pods
+  # and terminates the instance. Cap Karpenter's drain time with the NodePool's
+  # terminationGracePeriod instead.
+  removableFinalizers: [ ]
 
   # Enable dry-run mode (only log actions, don't actually delete nodes)
   dryRun: false

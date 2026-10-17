@@ -117,6 +117,7 @@ class TestNodeReaperExecution:
         # Verify finalizer cleanup was called
         self.mock_k8s_client_instance.cleanup_stuck_finalizers.assert_called_once_with(
             node_name="terminating-node",
+            node_uid=node.metadata.uid,
             finalizers_to_remove=["stuck.finalizer"],
             finalizers_to_keep=["keep.finalizer"],
         )
@@ -270,7 +271,46 @@ class TestNodeReaperExecution:
         # Verify no finalizer cleanup was called
         self.mock_k8s_client_instance.cleanup_stuck_finalizers.assert_not_called()
 
-        # Verify notification was still sent (for dry run notification)
+        # Nothing was done, so nothing is reported
+        mock_send_notification.assert_not_called()
+
+    @patch("nodereaper.reaper.send_notification")
+    def test_process_nodes_prometheus_failure_skips_deletions(self, mock_send_notification):
+        """Test that no node is deleted when Prometheus is enabled but the query failed."""
+        self.reaper.prometheus_enabled = True
+        self.reaper.prometheus_client = Mock()
+        self.reaper.prometheus_client.get_non_empty_nodes.return_value = None
+        self.mock_k8s_client_instance.list_nodes.return_value = [self.create_mock_node("node")]
+        self.mock_node_analyzer_instance.is_terminating.return_value = False
+        self.mock_node_analyzer_instance.should_delete_node.return_value = (True, "Node is empty")
+
+        self.reaper.process_nodes()
+
+        self.mock_k8s_client_instance.delete_node.assert_not_called()
+        mock_send_notification.assert_not_called()
+
+    @patch("nodereaper.reaper.send_notification")
+    def test_process_nodes_continues_after_node_error(self, mock_send_notification):
+        """Test that a failing node is skipped and earlier deletions are still reported."""
+        nodes = [self.create_mock_node("empty-node"), self.create_mock_node("broken-node")]
+        self.mock_k8s_client_instance.list_nodes.return_value = nodes
+        self.mock_k8s_client_instance.list_pods_on_node.side_effect = [
+            [],
+            KubernetesException("API Error"),
+        ]
+        self.mock_node_analyzer_instance.is_terminating.return_value = False
+        self.mock_node_analyzer_instance.should_delete_node.return_value = (True, "Node is empty")
+        self.mock_node_analyzer_instance.get_node_info.return_value = {
+            "name": "empty-node",
+            "cluster": "test-cluster",
+            "age": "1h",
+            "instance_type": "m5.large",
+            "zone": "us-west-2a",
+        }
+
+        self.reaper.process_nodes()
+
+        self.mock_k8s_client_instance.delete_node.assert_called_once_with("empty-node")
         mock_send_notification.assert_called_once()
 
     @patch("nodereaper.reaper.send_notification")

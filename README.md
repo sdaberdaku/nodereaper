@@ -28,7 +28,7 @@ Sometimes autoscalers (Cluster Autoscaler, Karpenter, etc.) fail to scale down e
 3. **Waits for minimum age** before considering nodes for deletion
 4. **Identifies empty nodes** that only run DaemonSet pods
 5. **Uses Prometheus metrics** (optional) to track how long nodes have been empty
-6. **Removes unhealthy nodes** that are unreachable or not ready
+6. **Removes unhealthy nodes** that have been unreachable or not ready for longer than `deletionTimeout`
 7. **Cleans stuck finalizers** from nodes that won't terminate
 8. **Sends notifications** when nodes are deleted
 
@@ -70,7 +70,7 @@ prometheus:
     enabled: false  # No authentication required
 ```
 
-When enabled, NodeReaper queries Prometheus to determine how long nodes have been empty, providing more precise deletion timing than age-based logic alone.
+When enabled, NodeReaper queries Prometheus to determine how long nodes have been empty, providing more precise deletion timing than age-based logic alone. If the query fails, NodeReaper deletes no nodes in that run.
 
 ## Safety Features
 

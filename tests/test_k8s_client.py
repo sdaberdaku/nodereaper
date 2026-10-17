@@ -212,9 +212,14 @@ class TestKubernetesClientMethods:
         finalizers_to_remove = ["finalizer1", "finalizer2"]
         finalizers_to_keep = ["finalizer3"]
 
-        self.client.cleanup_stuck_finalizers("test-node", finalizers_to_remove, finalizers_to_keep)
+        self.client.cleanup_stuck_finalizers(
+            "test-node", "uid-1", finalizers_to_remove, finalizers_to_keep
+        )
 
-        expected_patch = {"metadata": {"finalizers": ["finalizer3"]}}
+        expected_patch = [
+            {"op": "test", "path": "/metadata/uid", "value": "uid-1"},
+            {"op": "replace", "path": "/metadata/finalizers", "value": ["finalizer3"]},
+        ]
         self.mock_v1_api.patch_node.assert_called_once_with(name="test-node", body=expected_patch)
 
     def test_cleanup_stuck_finalizers_no_finalizers_to_remove(self):
@@ -222,7 +227,9 @@ class TestKubernetesClientMethods:
         finalizers_to_remove = []
         finalizers_to_keep = ["finalizer1"]
 
-        self.client.cleanup_stuck_finalizers("test-node", finalizers_to_remove, finalizers_to_keep)
+        self.client.cleanup_stuck_finalizers(
+            "test-node", "uid-1", finalizers_to_remove, finalizers_to_keep
+        )
 
         # Should not call patch_node
         self.mock_v1_api.patch_node.assert_not_called()
@@ -232,7 +239,7 @@ class TestKubernetesClientMethods:
         self.mock_v1_api.patch_node.side_effect = ApiException(status=404, reason="Not Found")
 
         # Should not raise exception
-        self.client.cleanup_stuck_finalizers("test-node", ["finalizer1"], [])
+        self.client.cleanup_stuck_finalizers("test-node", "uid-1", ["finalizer1"], [])
 
         self.mock_v1_api.patch_node.assert_called_once()
 
@@ -241,7 +248,7 @@ class TestKubernetesClientMethods:
         self.mock_v1_api.patch_node.side_effect = ApiException(status=403, reason="Forbidden")
 
         with pytest.raises(KubernetesException):
-            self.client.cleanup_stuck_finalizers("test-node", ["finalizer1"], [])
+            self.client.cleanup_stuck_finalizers("test-node", "uid-1", ["finalizer1"], [])
 
 
 class TestKubernetesClientIntegration:
@@ -292,10 +299,13 @@ class TestKubernetesClientIntegration:
         """Test finalizer cleanup workflow."""
         # Test cleanup with finalizers to remove
         self.client.cleanup_stuck_finalizers(
-            "stuck-node", ["stuck.finalizer", "another.finalizer"], ["keep.finalizer"]
+            "stuck-node", "uid-1", ["stuck.finalizer", "another.finalizer"], ["keep.finalizer"]
         )
 
-        expected_patch = {"metadata": {"finalizers": ["keep.finalizer"]}}
+        expected_patch = [
+            {"op": "test", "path": "/metadata/uid", "value": "uid-1"},
+            {"op": "replace", "path": "/metadata/finalizers", "value": ["keep.finalizer"]},
+        ]
         self.mock_v1_api.patch_node.assert_called_once_with(name="stuck-node", body=expected_patch)
 
     def test_error_handling_chain(self):

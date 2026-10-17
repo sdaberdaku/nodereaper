@@ -93,18 +93,27 @@ class KubernetesClient:
     def cleanup_stuck_finalizers(
         self,
         node_name: str,
+        node_uid: str,
         finalizers_to_remove: list[str],
         finalizers_to_keep: list[str],
     ) -> None:
         """Remove stuck finalizers from a terminating node.
 
         :param node_name: Name of the node
+        :param node_uid: UID of the node the finalizer lists were computed from
         :param finalizers_to_remove: List of finalizers to remove
         :param finalizers_to_keep: List of finalizers to keep
         """
         # Only patch if we have finalizers to remove
         if finalizers_to_remove:
-            patch_body = {"metadata": {"finalizers": finalizers_to_keep}}
+            # JSON patch: a strategic merge patch merges metadata.finalizers
+            # with the current list, so it can never remove an entry.
+            # The test op makes the API server reject the whole patch (HTTP 422) if a
+            # different node has since registered under the same name.
+            patch_body = [
+                {"op": "test", "path": "/metadata/uid", "value": node_uid},
+                {"op": "replace", "path": "/metadata/finalizers", "value": finalizers_to_keep},
+            ]
             try:
                 self.v1.patch_node(name=node_name, body=patch_body)
                 logger.info(f"Removed stuck finalizers from {node_name}: {finalizers_to_remove}")

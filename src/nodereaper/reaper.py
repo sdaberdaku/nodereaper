@@ -81,80 +81,104 @@ class NodeReaper:
         non_empty_nodes = (
             self.prometheus_client.get_non_empty_nodes() if self.prometheus_enabled else set()
         )
+        # Without the Prometheus lookback a node that is briefly empty between workloads
+        # would look idle, so delete nothing until Prometheus answers again
+        skip_deletions = non_empty_nodes is None
+        if skip_deletions:
+            logger.warning("Prometheus query failed, skipping node deletions in this run")
         try:
             nodes = self.k8s_client.list_nodes(self.node_label_selector)
         except KubernetesException as e:
             logger.exception(f"KubernetesException during node listing: {e}")
             raise e
 
-        for node in nodes:
-            node_name = node.metadata.name
-            logger.debug(f"Processing node: {node_name}")
-            if self.node_analyzer.is_terminating(node):
-                logger.debug(f"Node {node_name} is in terminating state")
-                # Analyze if finalizers should be cleaned up
-                should_cleanup, reason = self.node_analyzer.should_cleanup_finalizers(node)
-                logger.debug(
-                    f"Node: {node_name}, should_cleanup: '{should_cleanup}', reason: '{reason}'"
-                )
-                if should_cleanup:
-                    error_msg = None
-                    if not self.dry_run and self.enable_finalizer_cleanup:
-                        try:
-                            self.k8s_client.cleanup_stuck_finalizers(
-                                node_name=node_name,
-                                finalizers_to_remove=self.node_analyzer.finalizers_to_remove(node),
-                                finalizers_to_keep=self.node_analyzer.finalizers_to_keep(node),
-                            )
-                        except KubernetesException as e:
-                            logger.exception(
-                                f"Failed to cleanup node finalizers '{node_name}': {e}"
-                            )
-                            error_msg = str(e)
-                    notifications.append(
-                        self._format_message(
-                            node=node,
-                            reason=reason,
-                            error_msg=error_msg,
-                            dry_run=self.dry_run and self.enable_finalizer_cleanup,
-                            action="cleanup",
-                        )
-                    )
-            else:
-                logger.debug(f"Node {node_name} is not in terminating state")
-                # Get pods on this node
-                pods = self.k8s_client.list_pods_on_node(node_name)
-                # Analyze if node should be deleted
-                if node_name in non_empty_nodes:
-                    should_delete, reason = (
-                        False,
-                        "Node recently had non-DaemonSet Pods (per Prometheus data)",
-                    )
-                else:
-                    should_delete, reason = self.node_analyzer.should_delete_node(node, pods)
-                logger.debug(
-                    f"Node: {node_name}, should_delete: '{should_delete}', reason: '{reason}'"
-                )
-                if should_delete:
-                    error_msg = None
-                    if not self.dry_run:
-                        try:
-                            self.k8s_client.delete_node(node_name)
-                        except KubernetesException as e:
-                            logger.exception(f"Failed to delete node '{node_name}': {e}")
-                            error_msg = str(e)
-                    notifications.append(
-                        self._format_message(
-                            node=node,
-                            reason=reason,
-                            error_msg=error_msg,
-                            dry_run=self.dry_run,
-                            action="delete",
-                        )
-                    )
+        try:
+            for node in nodes:
+                try:
+                    message = self._process_node(node, non_empty_nodes or set(), skip_deletions)
+                except KubernetesException as e:
+                    logger.exception(f"Failed to process node '{node.metadata.name}': {e}")
+                    continue
+                if message:
+                    notifications.append(message)
+        finally:
+            # Report what was already done even if a later node failed unexpectedly
+            if notifications:
+                send_notification("\n\n".join(notifications))
 
-        if notifications:
-            send_notification("\n\n".join(notifications))
+    def _process_node(
+        self, node: k8s.V1Node, non_empty_nodes: set[str], skip_deletions: bool
+    ) -> str | None:
+        """Clean up or delete one node if it qualifies.
+
+        :param node: Kubernetes node object
+        :param non_empty_nodes: Nodes that recently had non-DaemonSet Pods (per Prometheus)
+        :param skip_deletions: Do not delete nodes in this run
+        :return: Notification message, or None if nothing was done
+        """
+        node_name = node.metadata.name
+        logger.debug(f"Processing node: {node_name}")
+        if self.node_analyzer.is_terminating(node):
+            logger.debug(f"Node {node_name} is in terminating state")
+            if not self.enable_finalizer_cleanup:
+                return None
+            # Analyze if finalizers should be cleaned up
+            should_cleanup, reason = self.node_analyzer.should_cleanup_finalizers(node)
+            logger.debug(
+                f"Node: {node_name}, should_cleanup: '{should_cleanup}', reason: '{reason}'"
+            )
+            if not should_cleanup:
+                return None
+            error_msg = None
+            if not self.dry_run:
+                try:
+                    self.k8s_client.cleanup_stuck_finalizers(
+                        node_name=node_name,
+                        node_uid=node.metadata.uid,
+                        finalizers_to_remove=self.node_analyzer.finalizers_to_remove(node),
+                        finalizers_to_keep=self.node_analyzer.finalizers_to_keep(node),
+                    )
+                except KubernetesException as e:
+                    logger.exception(f"Failed to cleanup node finalizers '{node_name}': {e}")
+                    error_msg = str(e)
+            return self._format_message(
+                node=node,
+                reason=reason,
+                error_msg=error_msg,
+                dry_run=self.dry_run,
+                action="cleanup",
+            )
+
+        logger.debug(f"Node {node_name} is not in terminating state")
+        if skip_deletions:
+            return None
+        # Get pods on this node
+        pods = self.k8s_client.list_pods_on_node(node_name)
+        # Analyze if node should be deleted
+        if node_name in non_empty_nodes:
+            should_delete, reason = (
+                False,
+                "Node recently had non-DaemonSet Pods (per Prometheus data)",
+            )
+        else:
+            should_delete, reason = self.node_analyzer.should_delete_node(node, pods)
+        logger.debug(f"Node: {node_name}, should_delete: '{should_delete}', reason: '{reason}'")
+        if not should_delete:
+            return None
+        error_msg = None
+        if not self.dry_run:
+            try:
+                self.k8s_client.delete_node(node_name)
+            except KubernetesException as e:
+                logger.exception(f"Failed to delete node '{node_name}': {e}")
+                error_msg = str(e)
+        return self._format_message(
+            node=node,
+            reason=reason,
+            error_msg=error_msg,
+            dry_run=self.dry_run,
+            action="delete",
+        )
 
     def _format_message(
         self,
