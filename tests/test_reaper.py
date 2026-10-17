@@ -117,6 +117,7 @@ class TestNodeReaperExecution:
         # Verify finalizer cleanup was called
         self.mock_k8s_client_instance.cleanup_stuck_finalizers.assert_called_once_with(
             node_name="terminating-node",
+            node_uid=node.metadata.uid,
             finalizers_to_remove=["stuck.finalizer"],
             finalizers_to_keep=["keep.finalizer"],
         )

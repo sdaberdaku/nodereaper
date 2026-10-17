@@ -134,6 +134,7 @@ class NodeReaper:
                 try:
                     self.k8s_client.cleanup_stuck_finalizers(
                         node_name=node_name,
+                        node_uid=node.metadata.uid,
                         finalizers_to_remove=self.node_analyzer.finalizers_to_remove(node),
                         finalizers_to_keep=self.node_analyzer.finalizers_to_keep(node),
                     )

@@ -17,6 +17,7 @@ from kubernetes import config as k8s_config
 from kubernetes.client.rest import ApiException
 
 from nodereaper.k8s import KubernetesClient, NodeAnalyzer
+from nodereaper.k8s.exception import KubernetesException
 from nodereaper.reaper import NodeReaper
 
 
@@ -460,18 +461,19 @@ class TestNodeReaperEndToEnd:
         k8s_client = KubernetesClient()
         node_name = f"nodereaper-test-node-{uuid.uuid4().hex[:8]}"
         # A bare Node object with no kubelet behind it; the finalizers keep it terminating
-        self.v1.create_node(
+        uid = self.v1.create_node(
             k8s.V1Node(
                 metadata=k8s.V1ObjectMeta(
                     name=node_name, finalizers=["example.com/remove", "example.com/keep"]
                 )
             )
-        )
+        ).metadata.uid
         try:
             self.v1.delete_node(node_name)
 
             k8s_client.cleanup_stuck_finalizers(
                 node_name=node_name,
+                node_uid=uid,
                 finalizers_to_remove=["example.com/remove"],
                 finalizers_to_keep=["example.com/keep"],
             )
@@ -480,6 +482,7 @@ class TestNodeReaperEndToEnd:
 
             k8s_client.cleanup_stuck_finalizers(
                 node_name=node_name,
+                node_uid=uid,
                 finalizers_to_remove=["example.com/keep"],
                 finalizers_to_keep=[],
             )
@@ -491,5 +494,39 @@ class TestNodeReaperEndToEnd:
                 self.v1.patch_node(
                     node_name, [{"op": "replace", "path": "/metadata/finalizers", "value": []}]
                 )
+            except ApiException:
+                pass
+
+    @pytest.mark.integration
+    def test_cleanup_stuck_finalizers_skips_replaced_node(self):
+        """Test that cleanup does not touch a different node registered under the same name."""
+        k8s_client = KubernetesClient()
+        node_name = f"nodereaper-test-node-{uuid.uuid4().hex[:8]}"
+        node = k8s.V1Node(
+            metadata=k8s.V1ObjectMeta(name=node_name, finalizers=["example.com/remove"])
+        )
+        old_uid = self.v1.create_node(node).metadata.uid
+        # The old node goes away and a new node registers under the same name
+        self.v1.patch_node(
+            node_name, [{"op": "replace", "path": "/metadata/finalizers", "value": []}]
+        )
+        self.v1.delete_node(node_name)
+        new_uid = self.v1.create_node(node).metadata.uid
+        assert new_uid != old_uid
+        try:
+            with pytest.raises(KubernetesException):
+                k8s_client.cleanup_stuck_finalizers(
+                    node_name=node_name,
+                    node_uid=old_uid,
+                    finalizers_to_remove=["example.com/remove"],
+                    finalizers_to_keep=[],
+                )
+            assert self.v1.read_node(node_name).metadata.finalizers == ["example.com/remove"]
+        finally:
+            try:
+                self.v1.patch_node(
+                    node_name, [{"op": "replace", "path": "/metadata/finalizers", "value": []}]
+                )
+                self.v1.delete_node(node_name)
             except ApiException:
                 pass
