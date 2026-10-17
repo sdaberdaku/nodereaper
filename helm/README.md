@@ -1,6 +1,6 @@
 # nodereaper
 
-![Version: 1.3.0](https://img.shields.io/badge/Version-1.3.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v1.3.0](https://img.shields.io/badge/AppVersion-v1.3.0-informational?style=flat-square)
+![Version: 1.3.1](https://img.shields.io/badge/Version-1.3.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v1.3.1](https://img.shields.io/badge/AppVersion-v1.3.1-informational?style=flat-square)
 
 A Kubernetes tool for automatically detecting and cleaning up empty nodes
 
@@ -26,9 +26,10 @@ A Kubernetes tool for automatically detecting and cleaning up empty nodes
 | imagePullSecrets | list | `[]` |  |
 | config.nodeMinAge | string | `"30m"` |  |
 | config.unhealthyTaints | list | `[]` |  |
-| config.protectionAnnotations[0] | string | `"karpenter.sh/do-not-evict=true"` |  |
-| config.protectionAnnotations[1] | string | `"cluster-autoscaler.kubernetes.io/scale-down-disabled=true"` |  |
-| config.protectionAnnotations[2] | string | `"nodereaper.io/do-not-delete=true"` |  |
+| config.protectionAnnotations[0] | string | `"karpenter.sh/do-not-disrupt=true"` |  |
+| config.protectionAnnotations[1] | string | `"karpenter.sh/do-not-evict=true"` |  |
+| config.protectionAnnotations[2] | string | `"cluster-autoscaler.kubernetes.io/scale-down-disabled=true"` |  |
+| config.protectionAnnotations[3] | string | `"nodereaper.io/do-not-delete=true"` |  |
 | config.protectionLabels | list | `[]` |  |
 | config.enableFinalizerCleanup | bool | `true` |  |
 | config.deletionTimeout | string | `"15m"` |  |
