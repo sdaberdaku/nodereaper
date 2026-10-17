@@ -12,109 +12,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `metadata.finalizers` with the existing list instead of replacing it, so nodes stuck in
   terminating state kept their finalizers and were reported again on every run. It now
   sends a JSON patch that replaces the list.
-- Added an integration test that runs the cleanup against a real API server.
-
-## [1.3.0] - 2025-12-23
-
-### Changed
-- **Code Modernization**: Updated to modern Python 3.9+ type hints
-  - Replaced `typing.Dict`, `typing.List`, `typing.Optional` with built-in `dict`, `list`, `| None`
-  - Updated all type annotations across the codebase for better readability
-- **Improved Code Structure**: Simplified import system
-  - Removed `src` prefix from imports for cleaner developer experience
-  - Updated package configuration for professional import names (`from nodereaper.config` instead of `from src.nodereaper.config`)
-- **Enhanced Code Quality**: Modernized conditional logic
-  - Converted duration parsing to use `match/case` syntax for better readability
-  - Simplified finalizer configuration by removing blacklist complexity
-  - Consolidated redundant methods in KubernetesClient class
-
-### Improved
-- **Configuration Management**: Moved all string processing to config module for better separation of concerns
-- **Error Handling**: Removed redundant config validation checks and improved failsafe handling
-- **Method Consolidation**: Unified finalizer cleanup methods into single `_cleanup_stuck_finalizers` method
-- **Type Safety**: Added comprehensive type annotations to all KubernetesClient methods
-- **Import Consistency**: Standardized to use `k8s` and `k8s_config` aliases for kubernetes imports
-
-### Developer Experience
-- Cleaner import structure improves code maintainability
-- Better type hints provide enhanced IDE support and code completion
-- Simplified configuration reduces complexity for contributors
-- Modern Python syntax improves code readability
-
-## [1.2.0] - 2025-12-23
-
-### Changed
-- **BREAKING**: `nodeLabelSelector` configuration format changed from list to map
-  - **Before**: `nodeLabelSelector: ["cleanup-enabled=true", "instance-type=m5.large"]`
-  - **After**: `nodeLabelSelector: {cleanup-enabled: "true", instance-type: "m5.large"}`
-- All matching operations now use exact matching instead of pattern matching:
-  - `finalizerWhitelist` and `finalizerBlacklist` use exact finalizer names
-  - `deletionTaints` use exact taint keys
-  - `protectionAnnotations` and `protectionLabels` use exact key-value pairs
-- Updated default `deletionTaints` to include only essential taint keys:
-  - `karpenter.sh/disrupted`
-  - `node.kubernetes.io/unreachable`
-  - `node.kubernetes.io/unschedulable`
 
 ### Added
-- Protection labels functionality with exact key-value matching
-- Enhanced cluster verification in test scripts to check actual cluster name
-- Comprehensive test coverage for new configuration formats
-- Better error handling and validation for configuration parsing
+- Integration test that runs the finalizer cleanup against a real API server.
+
+## [1.2.1] - 2026-01-09
 
 ### Fixed
-- Helm template coalesce warnings when using map-based configurations
-- Test scripts updated to use new map format for `nodeLabelSelector`
-- Improved template logic for handling different value types (strings, numbers, booleans)
+- Prometheus range selector: the lookback window is now an integer number of seconds
+  (`[600s:]`), not a float (`[600.0s:]`), which Prometheus rejects.
 
-### Documentation
-- Updated README with new configuration format examples
-- Added comprehensive configuration reference for all exact matching features
-- Updated Helm chart documentation to reflect new map-based configurations
-- Added troubleshooting section for common configuration issues
-
-## [1.1.0] - 2025-12-22
+## [1.2.0] - 2026-01-09
 
 ### Added
-- Force delete functionality with intelligent finalizer cleanup
-- Configurable finalizer whitelist and blacklist for safe cleanup
-- Protection annotations and labels for permanent node protection
-- Autoscaler-agnostic deletion markers with configurable patterns
-- Enhanced logging with detailed deletion reasons
-- Comprehensive test coverage including integration tests
+- Optional Prometheus integration (`prometheus.*` values). Nodes that had non-DaemonSet pods
+  at any point during `minEmptyDuration` (default 10m) are not deleted, so a node that is
+  briefly empty between workloads survives.
+- Optional basic authentication for Prometheus, read from an existing secret.
 
 ### Changed
-- Removed Karpenter-specific health checking logic
-- Made tool completely autoscaler-agnostic
-- Improved configuration validation and error handling
+- The Slack webhook secret template is now `slack-secret.yaml`.
 
-### Fixed
-- Finalizer cleanup timeout handling
-- Node age calculation accuracy
-- Memory and resource usage optimization
+## [1.1.1] - 2025-12-27
 
-## [1.0.0] - 2025-12-21
+### Changed
+- Per-node log lines moved from INFO to DEBUG, with the analysis result logged per node.
+
+## [1.1.0] - 2025-12-26
+
+### Changed
+- **Breaking**: `protectionAnnotations` and `protectionLabels` are lists of `key=value`
+  strings instead of maps.
+
+## [1.0.0] - 2025-12-26
 
 ### Added
-- Initial release of NodeReaper
-- Empty node detection (nodes with only DaemonSet pods)
-- Unschedulable node detection and cleanup
-- Age-based deletion policy
-- Slack notifications support
-- Dry-run mode for safe testing
-- Helm chart for easy deployment
-- Multi-architecture Docker images (amd64, arm64)
-- Comprehensive CI/CD pipeline
-- RBAC configuration with minimal required permissions
+- First public release: a Kubernetes CronJob (every 10 minutes by default) that deletes
+  nodes running only DaemonSet pods, and nodes that are unreachable, not ready or carry a
+  configured unhealthy taint.
+- Minimum node age, protection annotations and labels, and a node label selector.
+- Cleanup of allow-listed finalizers on nodes stuck in terminating state for longer than
+  `deletionTimeout`.
+- Dry-run mode, JSON logs and Slack notifications.
+- Helm chart (OCI, `oci://ghcr.io/sdaberdaku/charts/nodereaper`) and multi-arch images
+  (amd64, arm64) on GHCR.
 
-### Features
-- Kubernetes cluster integration with in-cluster and external config support
-- Configurable node minimum age before deletion
-- Integration with cluster autoscalers (Karpenter, Cluster Autoscaler)
-- Detailed logging and monitoring capabilities
-- Production-ready security configurations
-
-[1.3.0]: https://github.com/sdaberdaku/nodereaper/compare/v1.2.0...v1.3.0
-[1.2.0]: https://github.com/sdaberdaku/nodereaper/compare/v1.1.0...v1.2.0
+[1.2.2]: https://github.com/sdaberdaku/nodereaper/compare/v1.2.1...v1.2.2
+[1.2.1]: https://github.com/sdaberdaku/nodereaper/compare/v1.2.0...v1.2.1
+[1.2.0]: https://github.com/sdaberdaku/nodereaper/compare/v1.1.1...v1.2.0
+[1.1.1]: https://github.com/sdaberdaku/nodereaper/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/sdaberdaku/nodereaper/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/sdaberdaku/nodereaper/releases/tag/v1.0.0
