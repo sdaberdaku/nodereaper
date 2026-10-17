@@ -26,6 +26,7 @@ config:
   # Annotations that provide permanent protection from deletion (list of key=value pairs)
   # Nodes with these exact annotation key-value pairs will never be deleted by NodeReaper
   protectionAnnotations:
+    - karpenter.sh/do-not-disrupt=true
     - karpenter.sh/do-not-evict=true
     - cluster-autoscaler.kubernetes.io/scale-down-disabled=true
     - nodereaper.io/do-not-delete=true

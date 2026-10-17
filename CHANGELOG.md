@@ -5,6 +5,13 @@ All notable changes to NodeReaper will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-10-17
+
+### Changed
+- The chart's default `protectionAnnotations` include `karpenter.sh/do-not-disrupt=true`, the
+  annotation Karpenter v1 uses. `karpenter.sh/do-not-evict=true` (Karpenter before v1) stays in
+  the list.
+
 ## [1.3.0] - 2026-10-17
 
 ### Fixed
@@ -77,6 +84,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Helm chart (OCI, `oci://ghcr.io/sdaberdaku/charts/nodereaper`) and multi-arch images
   (amd64, arm64) on GHCR.
 
+[1.3.1]: https://github.com/sdaberdaku/nodereaper/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/sdaberdaku/nodereaper/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/sdaberdaku/nodereaper/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/sdaberdaku/nodereaper/compare/v1.1.1...v1.2.0
