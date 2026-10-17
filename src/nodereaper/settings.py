@@ -26,10 +26,14 @@ def _parse_duration(duration_str: str) -> timedelta:
 
     :param duration_str: Duration string (e.g., "30m", "1h", "45s")
     :return: Parsed timedelta object
+    :raises ValueError: If the string is not a number followed by s, m, h or d
     """
-    match = re.match(r"^(\d+)([smhd])$", duration_str.lower())
+    match = re.match(r"^(\d+)([smhd])$", duration_str.strip().lower())
     if not match:
-        return timedelta(minutes=10)  # Default fallback
+        # Fail at startup: a silent default could make nodes eligible for deletion too early
+        raise ValueError(
+            f"Invalid duration '{duration_str}': use a number followed by s, m, h or d (e.g. 30m)"
+        )
 
     value, unit = int(match.group(1)), match.group(2)
 
@@ -40,10 +44,8 @@ def _parse_duration(duration_str: str) -> timedelta:
             return timedelta(minutes=value)
         case "h":
             return timedelta(hours=value)
-        case "d":
-            return timedelta(days=value)
         case _:
-            return timedelta(minutes=10)  # Default fallback
+            return timedelta(days=value)
 
 
 def _parse_list(list_str: str) -> list[str]:

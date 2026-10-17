@@ -84,11 +84,14 @@ class TestNodeAnalyzer:
         taint.effect = effect
         return taint
 
-    def create_mock_condition(self, condition_type, status):
-        """Create a mock Kubernetes node condition."""
+    def create_mock_condition(self, condition_type, status, last_transition_time=None):
+        """Create a mock Kubernetes node condition (in this state for an hour by default)."""
         condition = Mock()
         condition.type = condition_type
         condition.status = status
+        condition.last_transition_time = last_transition_time or (
+            datetime.now(timezone.utc) - timedelta(hours=1)
+        )
         return condition
 
 
@@ -254,6 +257,19 @@ class TestNodeDeletionDecision(TestNodeAnalyzer):
 
         assert should_delete is True
         assert reason == "Node is not ready"
+
+    def test_should_not_delete_node_recently_not_ready(self):
+        """Test node that just became not ready or unreachable is kept until the timeout."""
+        creation_time = datetime.now(timezone.utc) - timedelta(hours=1)
+        just_now = datetime.now(timezone.utc) - timedelta(minutes=1)
+        for status in ("False", "Unknown"):
+            conditions = [self.create_mock_condition("Ready", status, just_now)]
+            node = self.create_mock_node(creation_timestamp=creation_time, conditions=conditions)
+
+            should_delete, reason = self.analyzer.should_delete_node(node, [self.create_mock_pod()])
+
+            assert should_delete is False
+            assert reason == "Node does not meet deletion criteria"
 
     def test_should_delete_node_unhealthy_taint(self):
         """Test node with unhealthy taint should be deleted."""

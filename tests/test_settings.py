@@ -38,14 +38,15 @@ class TestDurationParsing:
         assert result == timedelta(days=3)
 
     def test_parse_duration_invalid_format(self):
-        """Test invalid duration format returns default."""
-        result = settings._parse_duration("invalid")
-        assert result == timedelta(minutes=10)
+        """Test invalid duration formats raise instead of falling back silently."""
+        for value in ("invalid", "1h30m", "90", "500ms", "1.5h"):
+            with pytest.raises(ValueError):
+                settings._parse_duration(value)
 
     def test_parse_duration_empty_string(self):
-        """Test empty string returns default."""
-        result = settings._parse_duration("")
-        assert result == timedelta(minutes=10)
+        """Test empty string raises."""
+        with pytest.raises(ValueError):
+            settings._parse_duration("")
 
     def test_parse_duration_case_insensitive(self):
         """Test case insensitive parsing."""

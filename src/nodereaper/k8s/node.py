@@ -231,28 +231,40 @@ class NodeAnalyzer:
         else:
             return f"{total_seconds // 86400}d"
 
-    @staticmethod
-    def _is_unreachable(node: k8s.V1Node) -> bool:
-        """Check if node is in unreachable state.
+    def _is_unreachable(self, node: k8s.V1Node) -> bool:
+        """Check if node has been unreachable for at least the deletion timeout.
 
         :param node: Kubernetes node object
-        :return: True if node Ready condition is Unknown
+        :return: True if node Ready condition has been Unknown long enough
         """
-        conditions = node.status.conditions or []
-        return any(
-            condition.type == "Ready" and condition.status == "Unknown" for condition in conditions
-        )
+        return self._ready_status_for_timeout(node, "Unknown")
 
-    @staticmethod
-    def _is_not_ready(node: k8s.V1Node) -> bool:
-        """Check if node is not ready.
+    def _is_not_ready(self, node: k8s.V1Node) -> bool:
+        """Check if node has been not ready for at least the deletion timeout.
 
         :param node: Kubernetes node object
-        :return: True if node Ready condition is False
+        :return: True if node Ready condition has been False long enough
         """
+        return self._ready_status_for_timeout(node, "False")
+
+    def _ready_status_for_timeout(self, node: k8s.V1Node, status: str) -> bool:
+        """Check if the Ready condition has had the given status for at least the deletion timeout.
+
+        A kubelet restart or a short network blip also flips the Ready condition,
+        so a node only counts as unhealthy once the state has lasted.
+
+        :param node: Kubernetes node object
+        :param status: Ready condition status to look for ("False" or "Unknown")
+        :return: True if the Ready condition has had this status long enough
+        """
+        now = datetime.now(timezone.utc)
         conditions = node.status.conditions or []
         return any(
-            condition.type == "Ready" and condition.status == "False" for condition in conditions
+            condition.type == "Ready"
+            and condition.status == status
+            and condition.last_transition_time is not None
+            and now - condition.last_transition_time >= self.deletion_timeout
+            for condition in conditions
         )
 
     def _has_unhealthy_taint(self, node: k8s.V1Node) -> bool:

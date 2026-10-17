@@ -5,13 +5,32 @@ All notable changes to NodeReaper will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.2.2] - 2026-10-17
+## [1.3.0] - 2026-10-17
 
 ### Fixed
 - Finalizer cleanup now removes finalizers. It sent a strategic merge patch, which merges
   `metadata.finalizers` with the existing list instead of replacing it, so nodes stuck in
   terminating state kept their finalizers and were reported again on every run. It now
   sends a JSON patch that replaces the list.
+- A Kubernetes API error on one node no longer aborts the run: the node is skipped, and
+  notifications for nodes already processed are always sent.
+- No "cleanup" notification is sent when finalizer cleanup is disabled.
+
+### Changed
+- **Breaking**: nodes are deleted as unreachable or not ready only after their Ready condition
+  has been `Unknown` or `False` for at least `deletionTimeout`. Before, a node was deleted on
+  the first run after a kubelet restart or a short network blip.
+- **Breaking**: invalid durations (for example `1h30m` or `500ms`) make NodeReaper fail at
+  startup instead of silently becoming 10 minutes.
+- **Breaking**: the chart's default `unhealthyTaints` is empty. The old default included
+  `node.kubernetes.io/unschedulable`, which `kubectl cordon` adds, so cordoned nodes were
+  deleted with their workloads.
+- **Breaking**: the chart's default `removableFinalizers` is empty. Removing
+  `karpenter.sh/termination` cuts Karpenter's drain short; use the NodePool's
+  `terminationGracePeriod` to cap drain time instead.
+- When Prometheus is enabled and the query fails, no nodes are deleted in that run. Before,
+  NodeReaper fell back to checking only the current pods, which deletes nodes that are
+  briefly empty between workloads.
 
 ### Added
 - Integration test that runs the finalizer cleanup against a real API server.
@@ -57,7 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Helm chart (OCI, `oci://ghcr.io/sdaberdaku/charts/nodereaper`) and multi-arch images
   (amd64, arm64) on GHCR.
 
-[1.2.2]: https://github.com/sdaberdaku/nodereaper/compare/v1.2.1...v1.2.2
+[1.3.0]: https://github.com/sdaberdaku/nodereaper/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/sdaberdaku/nodereaper/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/sdaberdaku/nodereaper/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/sdaberdaku/nodereaper/compare/v1.1.0...v1.1.1

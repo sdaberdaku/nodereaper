@@ -237,7 +237,7 @@ class TestPrometheusClient:
         client = PrometheusClient("http://prometheus:9090")
         nodes = client.get_non_empty_nodes()
 
-        assert nodes == set()
+        assert nodes is None
 
     @patch("requests.Session.get")
     def test_get_non_empty_nodes_filters_empty_names(self, mock_get):
