@@ -104,7 +104,11 @@ class KubernetesClient:
         """
         # Only patch if we have finalizers to remove
         if finalizers_to_remove:
-            patch_body = {"metadata": {"finalizers": finalizers_to_keep}}
+            # JSON patch: a strategic merge patch merges metadata.finalizers
+            # with the current list, so it can never remove an entry
+            patch_body = [
+                {"op": "replace", "path": "/metadata/finalizers", "value": finalizers_to_keep}
+            ]
             try:
                 self.v1.patch_node(name=node_name, body=patch_body)
                 logger.info(f"Removed stuck finalizers from {node_name}: {finalizers_to_remove}")

@@ -214,7 +214,9 @@ class TestKubernetesClientMethods:
 
         self.client.cleanup_stuck_finalizers("test-node", finalizers_to_remove, finalizers_to_keep)
 
-        expected_patch = {"metadata": {"finalizers": ["finalizer3"]}}
+        expected_patch = [
+            {"op": "replace", "path": "/metadata/finalizers", "value": ["finalizer3"]}
+        ]
         self.mock_v1_api.patch_node.assert_called_once_with(name="test-node", body=expected_patch)
 
     def test_cleanup_stuck_finalizers_no_finalizers_to_remove(self):
@@ -295,7 +297,9 @@ class TestKubernetesClientIntegration:
             "stuck-node", ["stuck.finalizer", "another.finalizer"], ["keep.finalizer"]
         )
 
-        expected_patch = {"metadata": {"finalizers": ["keep.finalizer"]}}
+        expected_patch = [
+            {"op": "replace", "path": "/metadata/finalizers", "value": ["keep.finalizer"]}
+        ]
         self.mock_v1_api.patch_node.assert_called_once_with(name="stuck-node", body=expected_patch)
 
     def test_error_handling_chain(self):

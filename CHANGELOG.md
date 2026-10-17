@@ -5,6 +5,15 @@ All notable changes to NodeReaper will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2] - 2026-10-17
+
+### Fixed
+- Finalizer cleanup now removes finalizers. It sent a strategic merge patch, which merges
+  `metadata.finalizers` with the existing list instead of replacing it, so nodes stuck in
+  terminating state kept their finalizers and were reported again on every run. It now
+  sends a JSON patch that replaces the list.
+- Added an integration test that runs the cleanup against a real API server.
+
 ## [1.3.0] - 2025-12-23
 
 ### Changed

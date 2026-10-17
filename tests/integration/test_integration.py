@@ -453,3 +453,43 @@ class TestNodeReaperEndToEnd:
             assert "finalizer2" in settings.REMOVABLE_FINALIZERS
             assert settings.CLUSTER_NAME == "test-cluster"
             assert settings.LOG_LEVEL == "DEBUG"
+
+    @pytest.mark.integration
+    def test_cleanup_stuck_finalizers_removes_finalizers(self):
+        """Test that finalizer cleanup actually removes finalizers on a real API server."""
+        k8s_client = KubernetesClient()
+        node_name = f"nodereaper-test-node-{uuid.uuid4().hex[:8]}"
+        # A bare Node object with no kubelet behind it; the finalizers keep it terminating
+        self.v1.create_node(
+            k8s.V1Node(
+                metadata=k8s.V1ObjectMeta(
+                    name=node_name, finalizers=["example.com/remove", "example.com/keep"]
+                )
+            )
+        )
+        try:
+            self.v1.delete_node(node_name)
+
+            k8s_client.cleanup_stuck_finalizers(
+                node_name=node_name,
+                finalizers_to_remove=["example.com/remove"],
+                finalizers_to_keep=["example.com/keep"],
+            )
+            node = self.v1.read_node(node_name)
+            assert node.metadata.finalizers == ["example.com/keep"]
+
+            k8s_client.cleanup_stuck_finalizers(
+                node_name=node_name,
+                finalizers_to_remove=["example.com/keep"],
+                finalizers_to_keep=[],
+            )
+            with pytest.raises(ApiException) as exc_info:
+                self.v1.read_node(node_name)
+            assert exc_info.value.status == 404
+        finally:
+            try:
+                self.v1.patch_node(
+                    node_name, [{"op": "replace", "path": "/metadata/finalizers", "value": []}]
+                )
+            except ApiException:
+                pass
